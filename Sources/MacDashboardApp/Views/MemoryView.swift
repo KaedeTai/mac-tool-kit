@@ -129,6 +129,20 @@ public struct MemoryView: View {
                                         Text("[\(proc.category.rawValue)]")
                                             .font(.system(size: 10))
                                             .foregroundColor(.secondary)
+
+                                        if let ai = proc.aiContext {
+                                            HStack(spacing: 3) {
+                                                Image(systemName: "brain.head.profile")
+                                                    .font(.system(size: 9))
+                                                Text(ai.displayBadge)
+                                                    .font(.system(size: 9, weight: .bold))
+                                            }
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Color.purple.opacity(0.15))
+                                            .foregroundColor(.purple)
+                                            .cornerRadius(4)
+                                        }
                                     }
                                     Text("PID \(proc.pid) • \(proc.rawName)")
                                         .font(.system(size: 11))

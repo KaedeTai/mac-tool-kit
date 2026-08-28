@@ -99,6 +99,20 @@ public struct ProcessTableView: View {
                                         .foregroundColor(.blue)
                                         .cornerRadius(4)
                                 }
+
+                                if let ai = proc.aiContext {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "brain.head.profile")
+                                            .font(.system(size: 9))
+                                        Text(ai.displayBadge)
+                                            .font(.system(size: 10, weight: .bold))
+                                    }
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.purple.opacity(0.18))
+                                    .foregroundColor(.purple)
+                                    .cornerRadius(5)
+                                }
                             }
 
                             HStack(spacing: 6) {
@@ -240,6 +254,44 @@ public struct ProcessTableView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
+                    if let ai = proc.aiContext {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Image(systemName: "brain.head.profile")
+                                    .foregroundColor(.purple)
+                                Text("🤖 AI 任務上下文 (AI Agent Context)")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundColor(.purple)
+                            }
+
+                            HStack {
+                                Text("• 發起工具:").bold().frame(width: 90, alignment: .leading)
+                                Text(ai.toolName)
+                            }
+                            if let model = ai.modelName {
+                                HStack {
+                                    Text("• 調用模型:").bold().frame(width: 90, alignment: .leading)
+                                    Text(model).font(.system(size: 12, design: .monospaced)).bold()
+                                }
+                            }
+                            if let sId = ai.sessionId {
+                                HStack {
+                                    Text("• Session ID:").bold().frame(width: 90, alignment: .leading)
+                                    Text(sId).font(.system(size: 11, design: .monospaced)).foregroundColor(.secondary)
+                                }
+                            }
+                            if let task = ai.taskSummary {
+                                HStack {
+                                    Text("• 執行任務:").bold().frame(width: 90, alignment: .leading)
+                                    Text(task).foregroundColor(.primary)
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.purple.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+
                     HStack {
                         Text("觸發發起來源:").bold().frame(width: 110, alignment: .leading)
                         Text(proc.triggerAppName ?? "系統核心 / launchd")

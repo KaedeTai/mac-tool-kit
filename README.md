@@ -64,16 +64,23 @@
 
 ## 🌟 Key Features
 
-### 🔍 1. AI Agent & Process Root Attribution
-- **Beyond Opaque Activity Monitor**: Modern AI coding tools (Claude Code, Cursor, Antigravity) spawn numerous background Python, Node, and test runner processes. MacDashboard traverses the full Darwin process tree to reveal:
-  - The exact parent AI tool (e.g. `Claude Code (via uv, in Warp)`).
-  - The associated project repository workspace.
-  - One-click safe force-quit or priority renicing.
+### 🔍 1. AI Model & Session ID Root Attribution
+- **Beyond Opaque Activity Monitor**: Modern AI coding tools (Claude Code, Cursor, Antigravity, Ollama) spawn numerous background Python, Node, and test runner processes. MacDashboard automatically extracts and correlates:
+  - **AI Tool & Agent Name**: (e.g. `Claude Code`, `Antigravity Agent`, `Cursor AI`, `Ollama / Local LLM`).
+  - **Active AI Model**: (e.g. `claude-3-7-sonnet`, `deepseek-r1:14b`, `gemini-2.5-pro`, `gpt-4o`).
+  - **Session & Conversation ID**: (e.g. `#a9f7d8`, `#01J8K9`) directly tied to real-time CPU/RAM spikes.
+  - **Workspace & Task**: The underlying repository project and active task (e.g. `pytest unit tests`, `swift build`).
+  - **One-Click Safe Session Termination**: Stop runaway agent loops without guessing cryptic PIDs.
 
 ### 🐳 2. Docker Per-Container Resource Breakdown
 - **No More 8GB Mystery**: Instead of showing `com.docker.krun` as a single opaque 7GB+ memory block, MacDashboard breaks down each active container's individual RAM footprint, CPU%, and image tag.
 
-### ❄️ 3. Sensor-Based Closed-Loop Fan Control
+### 🍃 3. Monitoring Profiles & Eco Fan-Only Mode (< 0.05% CPU)
+- **⚡ Real-time (1s)**: Full-spectrum second-by-second analytics (~2-4% CPU).
+- **⚖️ Balanced (3s)**: Lightweight 3-second sampling (~0.5-1% CPU).
+- **🍃 Eco Fan-Only Mode**: Suspends all heavy process scans and Docker CLI polling while continuously driving closed-loop fan thermal regulation with negligible (< 0.05%) CPU overhead.
+
+### ❄️ 4. Sensor-Based Closed-Loop Fan Control
 - **8 Dedicated Thermal Sensors**:
   - 💻 **Apple Silicon SoC Package**: Whole-die aggregated temperature.
   - 🖥️ **CPU Performance/Efficiency Cores**
@@ -89,8 +96,8 @@
   - Eliminates rapid start-stop fan noise around critical temperature thresholds.
 - **Privileged Hardware Control**: Compatible with macOS SMC root helper protocol and manual RPM slider override (1,200 ~ 6,200 RPM).
 
-### ⚡ 4. Lag Detective (Instant Bottleneck Diagnosis)
-- Sub-second cross-correlation of CPU spikes, memory exhaustion, swap thrashing, and thermal throttling with one-click remedies.
+### ⚡ 5. Lag Detective (Instant Bottleneck Diagnosis)
+- Sub-second cross-correlation of CPU spikes, AI agent runaway sessions, memory exhaustion, swap thrashing, and thermal throttling with one-click remedies.
 
 ---
 

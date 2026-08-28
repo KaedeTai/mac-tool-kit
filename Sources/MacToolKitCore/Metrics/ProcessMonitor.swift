@@ -29,6 +29,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         let uptimeSeconds: TimeInterval
         let impact: String
         let parentAppName: String?
+        let aiContext: AIContextInfo?
     }
 
     public init() {
@@ -142,7 +143,8 @@ public final class ProcessMonitor: @unchecked Sendable {
                     threadCount: threadCount,
                     isUserApp: isUserApp,
                     terminationImpact: meta.impact,
-                    parentAppName: meta.parentAppName
+                    parentAppName: meta.parentAppName,
+                    aiContext: meta.aiContext
                 ))
             }
 
@@ -288,6 +290,15 @@ public final class ProcessMonitor: @unchecked Sendable {
             impact = "關閉「\(rawName)」應用程式，未儲存的檔案內容可能遺失"
         }
 
+        let aiCtx = resolveAIContext(
+            pid: pid,
+            rawName: rawName,
+            args: args,
+            cmdSummary: cmdSummary,
+            cwdInfo: cwdInfo,
+            triggerInfo: triggerInfo
+        )
+
         let meta = ProcessMetadata(
             friendlyName: friendly,
             category: category,
@@ -299,11 +310,113 @@ public final class ProcessMonitor: @unchecked Sendable {
             startedAt: details.startedAt,
             uptimeSeconds: details.uptime,
             impact: impact,
-            parentAppName: parentApp
+            parentAppName: parentApp,
+            aiContext: aiCtx
         )
 
         processMetadataCache[pid] = meta
         return meta
+    }
+
+    private func resolveAIContext(
+        pid: pid_t,
+        rawName: String,
+        args: [String],
+        cmdSummary: String?,
+        cwdInfo: (cwd: String?, project: String?),
+        triggerInfo: (app: String?, chain: [String])
+    ) -> AIContextInfo? {
+        let fullCmd = (cmdSummary ?? "").lowercased()
+        let cwd = (cwdInfo.cwd ?? "").lowercased()
+        let chainStr = triggerInfo.chain.joined(separator: " ").lowercased()
+
+        var tool: String? = nil
+        var model: String? = nil
+        var sessionId: String? = nil
+        var taskDesc: String? = nil
+
+        // 1. Antigravity Agent
+        if cwd.contains(".gemini/antigravity") || fullCmd.contains("antigravity") || chainStr.contains("antigravity") {
+            tool = "Antigravity Agent"
+            model = "Gemini 2.5 Pro"
+            if let brainRange = cwd.range(of: "brain/") {
+                let sub = String(cwd[brainRange.upperBound...])
+                let comp = sub.components(separatedBy: "/")
+                if let uuid = comp.first, uuid.count >= 8 {
+                    sessionId = uuid
+                }
+            }
+        }
+        // 2. Claude Code
+        else if fullCmd.contains("claude") || chainStr.contains("claude") || rawName.lowercased().contains("claude") {
+            tool = "Claude Code"
+            if let mIdx = args.firstIndex(where: { $0 == "--model" || $0 == "-m" }), mIdx + 1 < args.count {
+                model = args[mIdx + 1]
+            } else {
+                model = "claude-3-7-sonnet"
+            }
+            if let sIdx = args.firstIndex(where: { $0 == "--session-id" || $0 == "--session" }), sIdx + 1 < args.count {
+                sessionId = args[sIdx + 1]
+            } else if let sIdx = args.firstIndex(where: { $0.hasPrefix("wf_") }) {
+                sessionId = args[sIdx]
+            } else if let proj = cwdInfo.project, proj.contains("工作區") {
+                sessionId = proj.replacingOccurrences(of: "工作區 ", with: "")
+            }
+        }
+        // 3. Ollama / Local LLM
+        else if rawName.lowercased() == "ollama" || fullCmd.contains("ollama run") || fullCmd.contains("llama-server") {
+            tool = "Ollama / Local LLM"
+            if let rIdx = args.firstIndex(of: "run"), rIdx + 1 < args.count {
+                model = args[rIdx + 1]
+            } else if let mIdx = args.firstIndex(where: { $0 == "-m" || $0 == "--model" }), mIdx + 1 < args.count {
+                model = URL(fileURLWithPath: args[mIdx + 1]).lastPathComponent
+            } else {
+                model = "Local LLM"
+            }
+        }
+        // 4. Cursor AI
+        else if chainStr.contains("cursor") || fullCmd.contains("cursor") {
+            tool = "Cursor AI"
+            if let mIdx = args.firstIndex(where: { $0 == "--model" }), mIdx + 1 < args.count {
+                model = args[mIdx + 1]
+            } else {
+                model = "Claude 3.5 Sonnet"
+            }
+        }
+        // 5. Parent trigger contains AI
+        else if let trigger = triggerInfo.app, trigger.contains("Claude") || trigger.contains("Antigravity") || trigger.contains("Cursor") {
+            if trigger.contains("Claude") {
+                tool = "Claude Code"
+                model = "claude-3-7-sonnet"
+            } else if trigger.contains("Antigravity") {
+                tool = "Antigravity Agent"
+                model = "Gemini 2.5 Pro"
+            } else {
+                tool = "Cursor AI"
+                model = "Claude 3.5 Sonnet"
+            }
+            if let proj = cwdInfo.project, proj.contains("工作區") {
+                sessionId = proj.replacingOccurrences(of: "工作區 ", with: "")
+            }
+        }
+
+        if let validTool = tool {
+            if fullCmd.contains("pytest") {
+                taskDesc = "pytest 單元測試"
+            } else if fullCmd.contains("swift") || fullCmd.contains("cargo") {
+                taskDesc = "編譯建構 (Build)"
+            } else if fullCmd.contains("npm") || fullCmd.contains("yarn") || fullCmd.contains("bun") {
+                taskDesc = "Node 套件執行"
+            }
+            return AIContextInfo(
+                toolName: validTool,
+                modelName: model,
+                sessionId: sessionId,
+                workspaceName: cwdInfo.project,
+                taskSummary: taskDesc
+            )
+        }
+        return nil
     }
 
     private func getProcessDetails(pid: pid_t) -> (path: String, args: [String], startedAt: Date?, uptime: TimeInterval) {

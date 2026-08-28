@@ -315,6 +315,20 @@ public struct OverviewView: View {
                                                 .foregroundColor(.blue)
                                                 .cornerRadius(4)
                                         }
+
+                                        if let ai = proc.aiContext {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "brain.head.profile")
+                                                    .font(.system(size: 9))
+                                                Text(ai.displayBadge)
+                                                    .font(.system(size: 10, weight: .bold))
+                                            }
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(Color.purple.opacity(0.15))
+                                            .foregroundColor(.purple)
+                                            .cornerRadius(4)
+                                        }
                                     }
 
                                     HStack(spacing: 6) {

@@ -114,6 +114,43 @@ public enum ProcessCategory: String, Sendable, CaseIterable {
     }
 }
 
+// MARK: - AI Context Attribution Models
+public struct AIContextInfo: Codable, Sendable, Equatable {
+    public let toolName: String           // e.g. "Claude Code", "Antigravity Agent", "Cursor AI", "Ollama"
+    public let modelName: String?         // e.g. "claude-3-7-sonnet", "deepseek-r1:14b", "gemini-2.5-pro", "gpt-4o"
+    public let sessionId: String?         // e.g. "a9f7d89a-14b0-4d2a-a020-4a79842c177d", "sess_01J8K..."
+    public let sessionShortId: String?    // e.g. "#a9f7d8", "#01J8K9"
+    public let workspaceName: String?     // e.g. "mac-tool-kit"
+    public let taskSummary: String?       // e.g. "Running pytest on test_metrics.py"
+
+    public init(
+        toolName: String,
+        modelName: String? = nil,
+        sessionId: String? = nil,
+        sessionShortId: String? = nil,
+        workspaceName: String? = nil,
+        taskSummary: String? = nil
+    ) {
+        self.toolName = toolName
+        self.modelName = modelName
+        self.sessionId = sessionId
+        self.sessionShortId = sessionShortId ?? (sessionId.map { "#" + String($0.prefix(6)) })
+        self.workspaceName = workspaceName
+        self.taskSummary = taskSummary
+    }
+
+    public var displayBadge: String {
+        var parts: [String] = [toolName]
+        if let model = modelName {
+            parts.append("🧠 \(model)")
+        }
+        if let sId = sessionShortId {
+            parts.append("🆔 \(sId)")
+        }
+        return parts.joined(separator: " • ")
+    }
+}
+
 public struct ProcessItem: Identifiable, Sendable {
     public var id: pid_t { pid }
     public let pid: pid_t
@@ -135,6 +172,7 @@ public struct ProcessItem: Identifiable, Sendable {
     public let isUserApp: Bool
     public let terminationImpact: String
     public let parentAppName: String?
+    public let aiContext: AIContextInfo?
 
     public var formattedUptime: String {
         let total = Int(max(0, uptimeSeconds))
@@ -172,7 +210,8 @@ public struct ProcessItem: Identifiable, Sendable {
         threadCount: Int = 1,
         isUserApp: Bool = false,
         terminationImpact: String = "結束該行程以釋放系統資源",
-        parentAppName: String? = nil
+        parentAppName: String? = nil,
+        aiContext: AIContextInfo? = nil
     ) {
         self.pid = pid
         self.name = name
@@ -193,6 +232,7 @@ public struct ProcessItem: Identifiable, Sendable {
         self.isUserApp = isUserApp
         self.terminationImpact = terminationImpact
         self.parentAppName = parentAppName
+        self.aiContext = aiContext
     }
 }
 

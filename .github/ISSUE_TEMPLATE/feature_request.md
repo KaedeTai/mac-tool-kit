@@ -1,22 +1,22 @@
 ---
-name: 💡 功能建議與需求 (Feature Request)
-about: 提出關於 MacDashboard 的新功能或改進想法
-title: '[FEATURE] <簡短描述功能建議>'
+name: 💡 Feature Request
+about: Suggest a new feature or improvement for MacDashboard
+title: '[FEATURE] <Short summary of suggested feature>'
 labels: ['enhancement']
 assignees: 'PeterTing'
 ---
 
-## 🚀 需求背景 (Problem Statement)
-您希望解決什麼樣的痛點？或是遇到什麼樣的操作限制？
+## 🚀 Problem Statement
+What problem or limitation are you experiencing that this feature would solve?
 
-## 🎯 建議方案 (Proposed Solution)
-請具體描述您希望新增的功能、操作流程或介面呈現方式。
+## 🎯 Proposed Solution
+A clear description of what you want to happen and how you envision the user workflow.
 
-## 🔍 替代方案 (Alternatives Considered)
-您是否有考慮過其他替代解決方案或現有工具的做法？
+## 🔍 Alternatives Considered
+Have you considered any alternative solutions, workarounds, or approaches used by other tools?
 
-## 📸 設計草圖或參考 (Mockups or References)
-若有介面設計想法、參考 App 或草圖，歡迎附上。
+## 📸 Mockups or References
+If applicable, attach mockups, UI screenshots, or design sketches.
 
-## 💡 其他補充 (Additional Context)
-任何其他想補充的資訊。
+## 💡 Additional Context
+Any other context, metrics, or technical references.

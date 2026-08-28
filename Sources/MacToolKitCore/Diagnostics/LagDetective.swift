@@ -42,23 +42,47 @@ public final class LagDetective: Sendable {
             let projStr = topCPU.projectName != nil ? "在 [\(topCPU.projectName!)] 專案中" : ""
             let triggerStr = topCPU.triggerAppName != nil ? "由 \(topCPU.triggerAppName!) 執行的 " : ""
 
-            causes.append(LagCauseItem(
-                category: "行程高負載",
-                title: "「\(topCPU.name)」佔用過多 CPU (\(String(format: "%.1f", topCPU.cpuPercentage))%)",
-                detail: "PID \(topCPU.pid)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）：\(topCPU.terminationImpact)。",
-                iconName: "flame.fill",
-                isMajor: true
-            ))
+            if let ai = topCPU.aiContext {
+                let aiHeader = "\(ai.toolName)" + (ai.modelName != nil ? " (\(ai.modelName!))" : "")
+                let aiSession = ai.sessionShortId != nil ? " • Session \(ai.sessionShortId!)" : ""
+                let taskPart = ai.taskSummary != nil ? " [\(ai.taskSummary!)]" : ""
 
-            actions.append(RemediationAction(
-                typeId: "kill_cpu_hog",
-                title: "結束 \(topCPU.name)",
-                explanation: "\(topCPU.terminationImpact)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）。可立即釋放 \(String(format: "%.1f", topCPU.cpuPercentage))% 核心運算。",
-                buttonTitle: "結束「\(topCPU.name.prefix(16))」(PID \(topCPU.pid))",
-                iconName: "xmark.circle.fill",
-                pid: topCPU.pid,
-                isDestructive: true
-            ))
+                causes.append(LagCauseItem(
+                    category: "AI 運算尖峰",
+                    title: "🤖 \(aiHeader)\(aiSession) 負載尖峰 (\(String(format: "%.1f", topCPU.cpuPercentage))% CPU)",
+                    detail: "PID \(topCPU.pid)（\(triggerStr)\(projStr)\(taskPart)已運作 \(topCPU.formattedUptime)）：\(topCPU.terminationImpact)。",
+                    iconName: "brain.head.profile",
+                    isMajor: true
+                ))
+
+                actions.append(RemediationAction(
+                    typeId: "kill_cpu_hog",
+                    title: "中止 \(ai.toolName) 任務 Session",
+                    explanation: "中止由 \(ai.toolName) (模型: \(ai.modelName ?? "預設")) 執行的背景任務，立即釋放 \(String(format: "%.1f", topCPU.cpuPercentage))% CPU 核心運算。",
+                    buttonTitle: "結束 AI Session (PID \(topCPU.pid))",
+                    iconName: "stop.circle.fill",
+                    pid: topCPU.pid,
+                    isDestructive: true
+                ))
+            } else {
+                causes.append(LagCauseItem(
+                    category: "行程高負載",
+                    title: "「\(topCPU.name)」佔用過多 CPU (\(String(format: "%.1f", topCPU.cpuPercentage))%)",
+                    detail: "PID \(topCPU.pid)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）：\(topCPU.terminationImpact)。",
+                    iconName: "flame.fill",
+                    isMajor: true
+                ))
+
+                actions.append(RemediationAction(
+                    typeId: "kill_cpu_hog",
+                    title: "結束 \(topCPU.name)",
+                    explanation: "\(topCPU.terminationImpact)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）。可立即釋放 \(String(format: "%.1f", topCPU.cpuPercentage))% 核心運算。",
+                    buttonTitle: "結束「\(topCPU.name.prefix(16))」(PID \(topCPU.pid))",
+                    iconName: "xmark.circle.fill",
+                    pid: topCPU.pid,
+                    isDestructive: true
+                ))
+            }
 
             actions.append(RemediationAction(
                 typeId: "renice_cpu_hog",
