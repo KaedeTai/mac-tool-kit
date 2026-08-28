@@ -47,7 +47,7 @@ public struct AIAnalyticsView: View {
                     MetricStatCard(
                         title: "累計 AI 輔助編程時長",
                         value: formatHours(viewModel.summary.totalDurationSeconds),
-                        subValue: "橫跨 \(viewModel.summary.topProjects.count) 個專案",
+                        subValue: "橫跨 \(viewModel.summary.projectWorkspaces.count) 個專案",
                         iconName: "clock.arrow.circlepath",
                         color: .blue
                     )
@@ -79,13 +79,19 @@ public struct AIAnalyticsView: View {
                                             Text(session.toolType.rawValue)
                                                 .font(.system(size: 13, weight: .bold))
 
-                                            Text("📁 \(session.projectName)")
+                                            Text("📁 \(session.parentProjectName)")
                                                 .font(.system(size: 11, weight: .semibold))
                                                 .padding(.horizontal, 6)
                                                 .padding(.vertical, 1)
                                                 .background(Color.blue.opacity(0.15))
                                                 .foregroundColor(.blue)
                                                 .cornerRadius(4)
+
+                                            if let slug = session.subagentSlug {
+                                                Text("🌿 \(slug)")
+                                                    .font(.system(size: 10, design: .monospaced))
+                                                    .foregroundColor(.secondary)
+                                            }
 
                                             if let branch = session.gitBranch {
                                                 Text("🌿 \(branch)")
@@ -157,15 +163,15 @@ public struct AIAnalyticsView: View {
                     }
                 }
 
-                // MARK: - 3. Master-Detail Session & Task Inspector
-                GlassCard(title: "🔍 AI Session 深度工作分析與 Token 矩陣", iconName: "chart.bar.doc.horizontal.fill", accentColor: .purple) {
+                // MARK: - 3. Hierarchical Master-Detail Session & Task Inspector
+                GlassCard(title: "🔍 專案資料夾、主大腦與 Subagent 工作流分析", iconName: "chart.bar.doc.horizontal.fill", accentColor: .purple) {
                     VStack(spacing: 12) {
                         // Filter & Currency Bar
                         HStack(spacing: 10) {
                             HStack(spacing: 6) {
                                 Image(systemName: "magnifyingglass")
                                     .foregroundColor(.secondary)
-                                TextField("搜尋專案、Session ID 或模型...", text: $viewModel.searchText)
+                                TextField("搜尋專案、Subagent、Session ID 或模型...", text: $viewModel.searchText)
                                     .textFieldStyle(.plain)
                             }
                             .padding(6)
@@ -201,60 +207,32 @@ public struct AIAnalyticsView: View {
 
                         Divider()
 
-                        // Two Column Master-Detail
+                        // Two Column Master-Detail Tree
                         HStack(alignment: .top, spacing: 14) {
-                            // Left: Session List (Master)
+                            // Left: Hierarchical Project Workspaces & Subagents Tree
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("最近 Session 列表 (\(viewModel.filteredSessions.count))")
+                                Text("專案架構與工作流樹狀圖 (\(viewModel.filteredWorkspaces.count) 個專案)")
                                     .font(.system(size: 11, weight: .bold))
                                     .foregroundColor(.secondary)
 
                                 ScrollView {
-                                    LazyVStack(spacing: 6) {
-                                        ForEach(viewModel.filteredSessions) { s in
-                                            let isSelected = viewModel.selectedSession?.sessionId == s.sessionId
-                                            Button {
-                                                viewModel.selectedSession = s
-                                            } label: {
-                                                HStack(spacing: 10) {
-                                                    Image(systemName: s.toolType.iconName)
-                                                        .foregroundColor(isSelected ? .white : .purple)
-                                                        .frame(width: 18)
-
-                                                    VStack(alignment: .leading, spacing: 2) {
-                                                        HStack {
-                                                            Text(s.projectName)
-                                                                .font(.system(size: 12, weight: .bold))
-                                                                .foregroundColor(isSelected ? .white : .primary)
-                                                                .lineLimit(1)
-                                                            Spacer()
-                                                            Text(viewModel.formatCost(s.estimatedCostUSD))
-                                                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                                                .foregroundColor(isSelected ? .white : .purple)
-                                                        }
-
-                                                        HStack {
-                                                            Text("#\(s.sessionShortId)")
-                                                                .font(.system(size: 10, design: .monospaced))
-                                                                .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
-                                                            Spacer()
-                                                            Text("\(viewModel.formatTokens(s.tokenUsage.totalTokens)) 記號 • \(s.formattedDuration)")
-                                                                .font(.system(size: 10))
-                                                                .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
-                                                        }
-                                                    }
-                                                }
-                                                .padding(8)
-                                                .background(isSelected ? Color.purple : Color(nsColor: .controlBackgroundColor).opacity(0.5))
-                                                .cornerRadius(8)
-                                            }
-                                            .buttonStyle(.plain)
+                                    LazyVStack(spacing: 8) {
+                                        ForEach(viewModel.filteredWorkspaces) { ws in
+                                            ProjectWorkspaceTreeCard(
+                                                workspace: ws,
+                                                selectedSessionId: viewModel.selectedSession?.sessionId,
+                                                onSelectSession: { s in
+                                                    viewModel.selectedSession = s
+                                                },
+                                                formatCost: viewModel.formatCost,
+                                                formatTokens: viewModel.formatTokens
+                                            )
                                         }
                                     }
                                 }
-                                .frame(height: 460)
+                                .frame(height: 520)
                             }
-                            .frame(width: 290)
+                            .frame(width: 320)
 
                             Divider()
 
@@ -266,7 +244,7 @@ public struct AIAnalyticsView: View {
                                     Image(systemName: "brain.head.profile")
                                         .font(.system(size: 40))
                                         .foregroundColor(.secondary.opacity(0.5))
-                                    Text("請從左側選擇一個 AI Session 進行深度分析")
+                                    Text("請從左側專案樹中點選一個「主大腦」或「Subagent」查看完整 Token 與工作分析")
                                         .foregroundColor(.secondary)
                                 }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -278,14 +256,14 @@ public struct AIAnalyticsView: View {
                 // MARK: - 4. Project Rankings & Global Breakdown
                 HStack(spacing: 14) {
                     // Top Projects
-                    GlassCard(title: "🏆 各專案 AI 開銷與 Token 排行", iconName: "folder.fill", accentColor: .blue) {
+                    GlassCard(title: "🏆 各專案 AI 總開銷與 Token 排行", iconName: "folder.fill", accentColor: .blue) {
                         VStack(spacing: 8) {
-                            ForEach(viewModel.summary.topProjects.prefix(6)) { proj in
+                            ForEach(viewModel.summary.projectWorkspaces.prefix(6)) { proj in
                                 HStack {
                                     Text(proj.projectName)
                                         .font(.system(size: 12, weight: .bold))
                                     Spacer()
-                                    Text("\(proj.sessionCount) 次 Session")
+                                    Text("\(proj.sessionCount) 個工作流")
                                         .font(.system(size: 11))
                                         .foregroundColor(.secondary)
                                     Text(viewModel.formatTokens(proj.totalTokens))
@@ -349,6 +327,164 @@ public struct AIAnalyticsView: View {
     }
 }
 
+// MARK: - Tree Card Component
+struct ProjectWorkspaceTreeCard: View {
+    let workspace: AIProjectWorkspace
+    let selectedSessionId: String?
+    let onSelectSession: (AISessionRecord) -> Void
+    let formatCost: (Double) -> String
+    let formatTokens: (Int64) -> String
+
+    @State private var isExpanded: Bool = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Workspace Folder Header
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.secondary)
+                        .frame(width: 12)
+
+                    Image(systemName: "folder.fill")
+                        .foregroundColor(.blue)
+
+                    Text(workspace.projectName)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.primary)
+                        .lineLimit(1)
+
+                    if workspace.hasLiveActive {
+                        Circle()
+                            .fill(Color.green)
+                            .frame(width: 6, height: 6)
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(formatCost(workspace.totalCostUSD))
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundColor(.purple)
+                        Text(formatTokens(workspace.totalTokens))
+                            .font(.system(size: 9))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(8)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.8))
+                .cornerRadius(8)
+            }
+            .buttonStyle(.plain)
+
+            // Child Sessions & Subagents
+            if isExpanded {
+                VStack(spacing: 3) {
+                    // 1. Main Station Sessions
+                    ForEach(workspace.mainSessions) { s in
+                        let isSelected = selectedSessionId == s.sessionId
+                        Button {
+                            onSelectSession(s)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "crown.fill")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(isSelected ? .white : .orange)
+                                    .frame(width: 14)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    HStack {
+                                        Text("主 Session (#\(s.sessionShortId))")
+                                            .font(.system(size: 11, weight: .semibold))
+                                            .foregroundColor(isSelected ? .white : .primary)
+                                        Spacer()
+                                        Text(formatCost(s.estimatedCostUSD))
+                                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                            .foregroundColor(isSelected ? .white : .purple)
+                                    }
+                                    HStack {
+                                        Text("\(formatTokens(s.tokenUsage.totalTokens)) 記號 • \(s.formattedDuration)")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+                                        Spacer()
+                                        if s.livePID != nil {
+                                            Text("🟢 Active")
+                                                .font(.system(size: 8, weight: .bold))
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 8)
+                            .padding(.leading, 12)
+                            .background(isSelected ? Color.purple : Color.clear)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // 2. Subagent Workflows
+                    ForEach(workspace.subagentSessions) { s in
+                        let isSelected = selectedSessionId == s.sessionId
+                        Button {
+                            onSelectSession(s)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: "arrow.turn.down.right")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(isSelected ? .white : .secondary)
+                                Image(systemName: "leaf.fill")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(isSelected ? .white : .green)
+                                    .frame(width: 12)
+
+                                VStack(alignment: .leading, spacing: 1) {
+                                    HStack {
+                                        Text(s.subagentSlug ?? s.projectName)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundColor(isSelected ? .white : .primary)
+                                            .lineLimit(1)
+                                        Spacer()
+                                        Text(formatCost(s.estimatedCostUSD))
+                                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                            .foregroundColor(isSelected ? .white : .blue)
+                                    }
+                                    HStack {
+                                        Text("\(formatTokens(s.tokenUsage.totalTokens)) 記號 • \(s.formattedDuration)")
+                                            .font(.system(size: 9))
+                                            .foregroundColor(isSelected ? .white.opacity(0.8) : .secondary)
+                                        Spacer()
+                                        if s.livePID != nil {
+                                            Text("🟢 Active")
+                                                .font(.system(size: 8, weight: .bold))
+                                                .foregroundColor(.green)
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.vertical, 5)
+                            .padding(.horizontal, 8)
+                            .padding(.leading, 18)
+                            .background(isSelected ? Color.purple : Color.clear)
+                            .cornerRadius(6)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(4)
+        .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+        .cornerRadius(8)
+    }
+}
+
 // MARK: - Subviews
 struct MetricStatCard: View {
     let title: String
@@ -393,10 +529,19 @@ struct SessionDetailInspectorView: View {
             VStack(alignment: .leading, spacing: 14) {
                 // Header Info
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 8) {
-                            Text(session.projectName)
+                            Text(session.isSubagent ? "🌿 Subagent 工作流" : "👑 主 Session")
+                                .font(.system(size: 11, weight: .bold))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(session.isSubagent ? Color.green.opacity(0.15) : Color.orange.opacity(0.15))
+                                .foregroundColor(session.isSubagent ? .green : .orange)
+                                .cornerRadius(4)
+
+                            Text(session.subagentSlug ?? session.parentProjectName)
                                 .font(.system(size: 16, weight: .bold))
+
                             if let b = session.gitBranch {
                                 Text("🌿 \(b)")
                                     .font(.system(size: 11, design: .monospaced))
@@ -407,7 +552,7 @@ struct SessionDetailInspectorView: View {
                                     .cornerRadius(4)
                             }
                         }
-                        Text("Session ID: \(session.sessionId)")
+                        Text("所屬專案: \(session.parentProjectName) • Session ID: \(session.sessionId)")
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundColor(.secondary)
                     }
@@ -418,7 +563,7 @@ struct SessionDetailInspectorView: View {
                         Text(viewModel.formatCost(session.estimatedCostUSD))
                             .font(.system(size: 18, weight: .bold, design: .monospaced))
                             .foregroundColor(.purple)
-                        Text("總計 \(viewModel.formatTokens(session.tokenUsage.totalTokens)) Tokens")
+                        Text("該 Session 耗用 \(viewModel.formatTokens(session.tokenUsage.totalTokens)) Tokens")
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }
@@ -489,7 +634,7 @@ struct SessionDetailInspectorView: View {
 
                 // 3. Token Granular Structure
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("🪙 Token 結構明細")
+                    Text("🪙 該 Session 獨立 Token 結構明細")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(.secondary)
 
@@ -548,7 +693,7 @@ struct SessionDetailInspectorView: View {
             }
             .padding(10)
         }
-        .frame(maxHeight: 460)
+        .frame(maxHeight: 520)
     }
 }
 

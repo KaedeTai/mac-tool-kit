@@ -40,9 +40,12 @@ final class AIAnalyticsTests: XCTestCase {
             sessionId: "test-session-12345678",
             sessionShortId: "test-ses",
             toolType: .claudeCode,
-            projectName: "mac-tool-kit",
-            projectPath: "/path/to/mac-tool-kit",
+            projectName: "🌿 Subagent (quizzical-kowalevski-b2c78d)",
+            parentProjectName: "artogo-aeo-dashboard",
+            projectPath: "/path/to/artogo-aeo-dashboard",
             gitBranch: "main",
+            isSubagent: true,
+            subagentSlug: "quizzical-kowalevski-b2c78d",
             startedAt: Date(),
             lastActiveAt: Date(),
             durationSeconds: 125.0,
@@ -76,7 +79,9 @@ final class AIAnalyticsTests: XCTestCase {
             estimatedCostUSD: 0.85
         )
 
-        XCTAssertEqual(session.projectName, "mac-tool-kit")
+        XCTAssertEqual(session.parentProjectName, "artogo-aeo-dashboard")
+        XCTAssertTrue(session.isSubagent)
+        XCTAssertEqual(session.subagentSlug, "quizzical-kowalevski-b2c78d")
         XCTAssertEqual(session.status, .active)
         XCTAssertEqual(session.modelsUsed.first?.modelName, "claude-3-7-sonnet")
         XCTAssertEqual(session.taskBreakdown.first?.category, .testing)
@@ -87,8 +92,9 @@ final class AIAnalyticsTests: XCTestCase {
         let engine = AISessionAnalyticsEngine.shared
         let summary = engine.fetchSummary(forceRefresh: true)
 
-        // Engine should safely return summary without crashing
+        // Engine should safely return summary with hierarchical workspaces
         XCTAssertNotNil(summary)
         XCTAssertGreaterThanOrEqual(summary.totalSessionsCount, 0)
+        XCTAssertGreaterThanOrEqual(summary.projectWorkspaces.count, 0)
     }
 }

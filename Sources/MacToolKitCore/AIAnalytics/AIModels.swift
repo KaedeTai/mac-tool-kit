@@ -188,8 +188,11 @@ public struct AISessionRecord: Identifiable, Sendable {
     public let sessionShortId: String
     public let toolType: AIToolType
     public let projectName: String
+    public let parentProjectName: String
     public let projectPath: String
     public let gitBranch: String?
+    public let isSubagent: Bool
+    public let subagentSlug: String?
     public let startedAt: Date
     public let lastActiveAt: Date
     public let durationSeconds: TimeInterval
@@ -224,8 +227,11 @@ public struct AISessionRecord: Identifiable, Sendable {
         sessionShortId: String? = nil,
         toolType: AIToolType,
         projectName: String,
+        parentProjectName: String? = nil,
         projectPath: String,
         gitBranch: String? = nil,
+        isSubagent: Bool = false,
+        subagentSlug: String? = nil,
         startedAt: Date,
         lastActiveAt: Date,
         durationSeconds: TimeInterval,
@@ -245,8 +251,11 @@ public struct AISessionRecord: Identifiable, Sendable {
         self.sessionShortId = sessionShortId ?? String(sessionId.prefix(8))
         self.toolType = toolType
         self.projectName = projectName
+        self.parentProjectName = parentProjectName ?? projectName
         self.projectPath = projectPath
         self.gitBranch = gitBranch
+        self.isSubagent = isSubagent
+        self.subagentSlug = subagentSlug
         self.startedAt = startedAt
         self.lastActiveAt = lastActiveAt
         self.durationSeconds = durationSeconds
@@ -261,6 +270,44 @@ public struct AISessionRecord: Identifiable, Sendable {
         self.tokenUsage = tokenUsage
         self.estimatedCostUSD = estimatedCostUSD
         self.turns = turns
+    }
+}
+
+// MARK: - Hierarchical Project Workspace Group
+public struct AIProjectWorkspace: Identifiable, Sendable {
+    public var id: String { projectName }
+    public let projectName: String
+    public let projectPath: String
+    public let totalTokens: Int64
+    public let totalCostUSD: Double
+    public let totalDurationSeconds: TimeInterval
+    public let sessionCount: Int
+    public let mainSessions: [AISessionRecord]
+    public let subagentSessions: [AISessionRecord]
+
+    public var hasLiveActive: Bool {
+        mainSessions.contains(where: { $0.livePID != nil }) ||
+        subagentSessions.contains(where: { $0.livePID != nil })
+    }
+
+    public init(
+        projectName: String,
+        projectPath: String,
+        totalTokens: Int64,
+        totalCostUSD: Double,
+        totalDurationSeconds: TimeInterval,
+        sessionCount: Int,
+        mainSessions: [AISessionRecord],
+        subagentSessions: [AISessionRecord]
+    ) {
+        self.projectName = projectName
+        self.projectPath = projectPath
+        self.totalTokens = totalTokens
+        self.totalCostUSD = totalCostUSD
+        self.totalDurationSeconds = totalDurationSeconds
+        self.sessionCount = sessionCount
+        self.mainSessions = mainSessions
+        self.subagentSessions = subagentSessions
     }
 }
 
@@ -285,6 +332,7 @@ public struct AIProjectSummary: Identifiable, Sendable {
 // MARK: - Overall Telemetry Summary
 public struct AIAnalyticsSummary: Sendable {
     public let activeSessions: [AISessionRecord]
+    public let projectWorkspaces: [AIProjectWorkspace]
     public let recentSessions: [AISessionRecord]
     public let totalSessionsCount: Int
     public let totalDurationSeconds: TimeInterval
@@ -298,6 +346,7 @@ public struct AIAnalyticsSummary: Sendable {
 
     public init(
         activeSessions: [AISessionRecord] = [],
+        projectWorkspaces: [AIProjectWorkspace] = [],
         recentSessions: [AISessionRecord] = [],
         totalSessionsCount: Int = 0,
         totalDurationSeconds: TimeInterval = 0,
@@ -310,6 +359,7 @@ public struct AIAnalyticsSummary: Sendable {
         allTasksBreakdown: [AITaskCategoryUsage] = []
     ) {
         self.activeSessions = activeSessions
+        self.projectWorkspaces = projectWorkspaces
         self.recentSessions = recentSessions
         self.totalSessionsCount = totalSessionsCount
         self.totalDurationSeconds = totalDurationSeconds

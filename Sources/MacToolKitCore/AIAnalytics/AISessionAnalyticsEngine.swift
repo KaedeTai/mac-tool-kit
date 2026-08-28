@@ -53,11 +53,12 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
             var liveRAM: UInt64? = nil
             var liveStatus = session.status
 
-            // Check if there is a running process belonging to this session or tool
+            // Accurate correlation: Match running process whose working directory is precisely the session path
             if session.toolType == .claudeCode {
-                if let matched = liveProcesses.first(where: {
-                    $0.rawName.lowercased().contains("claude") ||
-                    ($0.aiContext?.toolName == "Claude Code" && $0.projectName == session.projectName)
+                if let matched = liveProcesses.first(where: { p in
+                    guard p.rawName.lowercased().contains("claude") || p.aiContext?.toolName == "Claude Code" else { return false }
+                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/" else { return false }
+                    return pCwd == session.projectPath || session.projectPath.hasPrefix(pCwd) || pCwd.hasPrefix(session.projectPath)
                 }) {
                     livePID = matched.pid
                     liveCPU = matched.cpuPercentage
@@ -65,10 +66,10 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                     liveStatus = matched.cpuPercentage > 15.0 ? .executingTool : (matched.cpuPercentage > 1.0 ? .thinking : .idle)
                 }
             } else if session.toolType == .antigravity {
-                if let matched = liveProcesses.first(where: {
-                    $0.rawName.lowercased().contains("antigravity") ||
-                    $0.aiContext?.toolName == "Antigravity Agent" ||
-                    ($0.workingDirectory?.contains(session.sessionId) ?? false)
+                if let matched = liveProcesses.first(where: { p in
+                    guard p.rawName.lowercased().contains("antigravity") || p.aiContext?.toolName == "Antigravity Agent" else { return false }
+                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/" else { return false }
+                    return pCwd.contains(session.sessionId) || pCwd == session.projectPath
                 }) {
                     livePID = matched.pid
                     liveCPU = matched.cpuPercentage
@@ -82,8 +83,11 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                 sessionShortId: session.sessionShortId,
                 toolType: session.toolType,
                 projectName: session.projectName,
+                parentProjectName: session.parentProjectName,
                 projectPath: session.projectPath,
                 gitBranch: session.gitBranch,
+                isSubagent: session.isSubagent,
+                subagentSlug: session.subagentSlug,
                 startedAt: session.startedAt,
                 lastActiveAt: session.lastActiveAt,
                 durationSeconds: session.durationSeconds,
@@ -116,12 +120,12 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
             }
 
             // Project agg
-            var pData = projectMap[session.projectName] ?? (count: 0, tokens: 0, cost: 0.0, duration: 0)
+            var pData = projectMap[session.parentProjectName] ?? (count: 0, tokens: 0, cost: 0.0, duration: 0)
             pData.count += 1
             pData.tokens += session.tokenUsage.totalTokens
             pData.cost += session.estimatedCostUSD
             pData.duration += session.durationSeconds
-            projectMap[session.projectName] = pData
+            projectMap[session.parentProjectName] = pData
 
             // Model agg
             for m in session.modelsUsed {
@@ -144,6 +148,38 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                 taskAggMap[t.category] = tData
             }
         }
+
+        // Build Hierarchical Project Workspaces Group
+        var workspaceDict: [String: (path: String, main: [AISessionRecord], sub: [AISessionRecord])] = [:]
+        for session in updatedSessions {
+            let pKey = session.parentProjectName
+            var existing = workspaceDict[pKey] ?? (path: session.projectPath, main: [], sub: [])
+            if session.isSubagent {
+                existing.sub.append(session)
+            } else {
+                existing.main.append(session)
+            }
+            workspaceDict[pKey] = existing
+        }
+
+        var projectWorkspaces: [AIProjectWorkspace] = []
+        for (pName, wData) in workspaceDict {
+            let allSess = wData.main + wData.sub
+            let sumTokens = allSess.reduce(0) { $0 + $1.tokenUsage.totalTokens }
+            let sumCost = allSess.reduce(0.0) { $0 + $1.estimatedCostUSD }
+            let sumDur = allSess.reduce(0.0) { $0 + $1.durationSeconds }
+            projectWorkspaces.append(AIProjectWorkspace(
+                projectName: pName,
+                projectPath: wData.path,
+                totalTokens: sumTokens,
+                totalCostUSD: sumCost,
+                totalDurationSeconds: sumDur,
+                sessionCount: allSess.count,
+                mainSessions: wData.main,
+                subagentSessions: wData.sub
+            ))
+        }
+        projectWorkspaces.sort { $0.totalCostUSD > $1.totalCostUSD }
 
         // Format project rankings
         var topProjects: [AIProjectSummary] = []
@@ -188,6 +224,7 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
 
         let summary = AIAnalyticsSummary(
             activeSessions: activeSessions,
+            projectWorkspaces: projectWorkspaces,
             recentSessions: updatedSessions,
             totalSessionsCount: updatedSessions.count,
             totalDurationSeconds: totalDurationAllTime,

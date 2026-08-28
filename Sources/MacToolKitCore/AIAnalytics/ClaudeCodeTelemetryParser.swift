@@ -257,6 +257,9 @@ public final class ClaudeCodeTelemetryParser: Sendable {
         modelsUsed.sort { $0.turnCount > $1.turnCount }
         taskBreakdown.sort { $0.callCount > $1.callCount }
 
+        let folderName = url.deletingLastPathComponent().lastPathComponent
+        let identity = resolveProjectIdentity(folderName: folderName, cwd: projectPath)
+
         let tokenSummary = AITokenUsageSummary(
             inputTokens: totalInputTokens,
             outputTokens: totalOutputTokens,
@@ -269,9 +272,12 @@ public final class ClaudeCodeTelemetryParser: Sendable {
             sessionId: sessionId,
             sessionShortId: String(sessionId.prefix(8)),
             toolType: .claudeCode,
-            projectName: projectName,
-            projectPath: projectPath,
+            projectName: identity.projectName,
+            parentProjectName: identity.parentProjectName,
+            projectPath: projectPath.isEmpty ? "\(NSHomeDirectory())/.claude/projects/\(folderName)" : projectPath,
             gitBranch: gitBranch,
+            isSubagent: identity.isSubagent,
+            subagentSlug: identity.subagentSlug,
             startedAt: startedAt,
             lastActiveAt: lastActiveAt,
             durationSeconds: durationSec,
@@ -284,5 +290,37 @@ public final class ClaudeCodeTelemetryParser: Sendable {
             estimatedCostUSD: totalCost,
             turns: turns
         )
+    }
+
+    private func resolveProjectIdentity(folderName: String, cwd: String?) -> (projectName: String, parentProjectName: String, isSubagent: Bool, subagentSlug: String?) {
+        var cleanFolder = folderName
+        if cleanFolder.hasPrefix("-") {
+            cleanFolder = String(cleanFolder.dropFirst())
+        }
+
+        // 1. Worktree or subagent pattern (e.g. artogo-aeo-dashboard--claude-worktrees-quizzical-kowalevski-b2c78d)
+        if cleanFolder.contains("--claude-worktrees-") {
+            let parts = cleanFolder.components(separatedBy: "--claude-worktrees-")
+            let parentRaw = parts[0]
+            let slug = parts.count > 1 ? parts[1] : "worktree-subagent"
+            let parentProjName = URL(fileURLWithPath: parentRaw.replacingOccurrences(of: "-", with: "/")).lastPathComponent
+            let fullParent = parentProjName.isEmpty ? "Workspace" : parentProjName
+            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: fullParent, isSubagent: true, subagentSlug: slug)
+        } else if cleanFolder.contains("--claude-") {
+            let parts = cleanFolder.components(separatedBy: "--claude-")
+            let slug = parts.count > 1 ? parts[1] : "claude-subagent"
+            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: "Claude System", isSubagent: true, subagentSlug: slug)
+        }
+
+        // 2. Standard main project station
+        if let c = cwd, !c.isEmpty && c != "/" {
+            let pName = URL(fileURLWithPath: c).lastPathComponent
+            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName, isSubagent: false, subagentSlug: nil)
+        }
+
+        let parsedPath = cleanFolder.replacingOccurrences(of: "-", with: "/")
+        let pName = URL(fileURLWithPath: parsedPath).lastPathComponent
+        let finalName = pName.isEmpty ? "Workspace" : pName
+        return (projectName: "👑 主 Session (\(finalName))", parentProjectName: finalName, isSubagent: false, subagentSlug: nil)
     }
 }

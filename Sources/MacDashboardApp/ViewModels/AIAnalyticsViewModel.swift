@@ -68,6 +68,36 @@ public final class AIAnalyticsViewModel: ObservableObject {
         }
     }
 
+    public var filteredWorkspaces: [AIProjectWorkspace] {
+        var list = summary.projectWorkspaces
+        if let tool = filterToolType {
+            list = list.compactMap { ws in
+                let filteredMain = ws.mainSessions.filter { $0.toolType == tool }
+                let filteredSub = ws.subagentSessions.filter { $0.toolType == tool }
+                if filteredMain.isEmpty && filteredSub.isEmpty { return nil }
+                return AIProjectWorkspace(
+                    projectName: ws.projectName,
+                    projectPath: ws.projectPath,
+                    totalTokens: (filteredMain + filteredSub).reduce(0) { $0 + $1.tokenUsage.totalTokens },
+                    totalCostUSD: (filteredMain + filteredSub).reduce(0.0) { $0 + $1.estimatedCostUSD },
+                    totalDurationSeconds: (filteredMain + filteredSub).reduce(0.0) { $0 + $1.durationSeconds },
+                    sessionCount: filteredMain.count + filteredSub.count,
+                    mainSessions: filteredMain,
+                    subagentSessions: filteredSub
+                )
+            }
+        }
+        if !searchText.isEmpty {
+            let q = searchText.lowercased()
+            list = list.filter { ws in
+                ws.projectName.lowercased().contains(q) ||
+                ws.mainSessions.contains(where: { $0.sessionId.lowercased().contains(q) || $0.modelsUsed.contains(where: { $0.modelName.lowercased().contains(q) }) }) ||
+                ws.subagentSessions.contains(where: { ($0.subagentSlug?.lowercased().contains(q) ?? false) || $0.sessionId.lowercased().contains(q) })
+            }
+        }
+        return list
+    }
+
     public var filteredSessions: [AISessionRecord] {
         var list = summary.recentSessions
         if let tool = filterToolType {
@@ -77,6 +107,8 @@ public final class AIAnalyticsViewModel: ObservableObject {
             let q = searchText.lowercased()
             list = list.filter {
                 $0.projectName.lowercased().contains(q) ||
+                $0.parentProjectName.lowercased().contains(q) ||
+                ($0.subagentSlug?.lowercased().contains(q) ?? false) ||
                 $0.sessionId.lowercased().contains(q) ||
                 ($0.gitBranch?.lowercased().contains(q) ?? false) ||
                 $0.modelsUsed.contains(where: { $0.modelName.lowercased().contains(q) })
