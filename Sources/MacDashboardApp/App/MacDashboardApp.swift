@@ -7,6 +7,7 @@ struct MacDashboardApp: App {
     @StateObject private var dashboardVM = DashboardViewModel.shared
     @StateObject private var lagVM = LagDetectiveViewModel.shared
     @StateObject private var fanVM = FanControlViewModel.shared
+    @StateObject private var aiVM = AIAnalyticsViewModel()
 
     @Environment(\.openWindow) private var openWindow
 
@@ -16,7 +17,8 @@ struct MacDashboardApp: App {
             MainWindowView(
                 dashboardVM: dashboardVM,
                 lagVM: lagVM,
-                fanVM: fanVM
+                fanVM: fanVM,
+                aiVM: aiVM
             )
         }
         .windowResizability(.contentSize)

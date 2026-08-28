@@ -64,18 +64,24 @@
 
 ## 🌟 Key Features
 
-### 🔍 1. AI Model & Session ID Root Attribution
-- **Beyond Opaque Activity Monitor**: Modern AI coding tools (Claude Code, Cursor, Antigravity, Ollama) spawn numerous background Python, Node, and test runner processes. MacDashboard automatically extracts and correlates:
+### 🧠 1. AI Coding Usage Analytics & Telemetry Center
+- **Live Active Session Telemetry**: Real-time status detection for **Claude Code**, **Antigravity**, **Cursor**, and **Ollama / Local LLMs** with live PID, CPU%, Resident RAM, and one-click session abort.
+- **Model & Task Breakdown**: Deep inspection of models invoked (`claude-3-7-sonnet`, `claude-opus-5`, `claude-3-5-haiku`, `gemini-2.5-pro`, `deepseek-r1`) and tasks performed (**Unit Testing**, **Code Editing**, **Codebase Search & Grep**, **Architecture Planning**).
+- **Granular Token & Cost Analytics**: Tracks **Input**, **Output**, **Prompt Cache Read** (90% savings), and **Thinking Tokens** per session and per task, with USD ($) and TWD (NT$) cost conversion.
+- **Chronological Turn Timeline & Project Rankings**: Complete timeline with turn durations, tool latency metrics, and top project consumption charts.
+
+### 🔍 2. AI Model & Session ID Root Attribution
+- **Beyond Opaque Activity Monitor**: Modern AI coding tools spawn numerous background Python, Node, and test runner processes. MacDashboard automatically extracts and correlates:
   - **AI Tool & Agent Name**: (e.g. `Claude Code`, `Antigravity Agent`, `Cursor AI`, `Ollama / Local LLM`).
   - **Active AI Model**: (e.g. `claude-3-7-sonnet`, `deepseek-r1:14b`, `gemini-2.5-pro`, `gpt-4o`).
   - **Session & Conversation ID**: (e.g. `#a9f7d8`, `#01J8K9`) directly tied to real-time CPU/RAM spikes.
   - **Workspace & Task**: The underlying repository project and active task (e.g. `pytest unit tests`, `swift build`).
   - **One-Click Safe Session Termination**: Stop runaway agent loops without guessing cryptic PIDs.
 
-### 🐳 2. Docker Per-Container Resource Breakdown
+### 🐳 3. Docker Per-Container Resource Breakdown
 - **No More 8GB Mystery**: Instead of showing `com.docker.krun` as a single opaque 7GB+ memory block, MacDashboard breaks down each active container's individual RAM footprint, CPU%, and image tag.
 
-### 🍃 3. Monitoring Profiles & Eco Fan-Only Mode (< 0.05% CPU)
+### 🍃 4. Monitoring Profiles & Eco Fan-Only Mode (< 0.05% CPU)
 - **⚡ Real-time (1s)**: Full-spectrum second-by-second analytics (~2-4% CPU).
 - **⚖️ Balanced (3s)**: Lightweight 3-second sampling (~0.5-1% CPU).
 - **🍃 Eco Fan-Only Mode**: Suspends all heavy process scans and Docker CLI polling while continuously driving closed-loop fan thermal regulation with negligible (< 0.05%) CPU overhead.

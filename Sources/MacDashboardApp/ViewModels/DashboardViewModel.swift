@@ -5,6 +5,7 @@ import MacToolKitCore
 
 public enum DashboardTab: String, CaseIterable, Identifiable {
     case overview = "系統總覽"
+    case aiAnalytics = "AI 寫程式分析"
     case lagDetective = "Lag 診斷中心"
     case cpu = "CPU 運算"
     case memory = "記憶體 RAM"
@@ -17,6 +18,7 @@ public enum DashboardTab: String, CaseIterable, Identifiable {
     public var iconName: String {
         switch self {
         case .overview: return "gauge.with.dots.needle.bottom.50percent"
+        case .aiAnalytics: return "brain.head.profile"
         case .lagDetective: return "stethoscope"
         case .cpu: return "cpu"
         case .memory: return "memorychip"
@@ -29,12 +31,13 @@ public enum DashboardTab: String, CaseIterable, Identifiable {
     public var keyboardShortcutKey: KeyEquivalent {
         switch self {
         case .overview: return "1"
-        case .lagDetective: return "2"
-        case .cpu: return "3"
-        case .memory: return "4"
-        case .diskNetwork: return "5"
-        case .thermalFan: return "6"
-        case .processes: return "7"
+        case .aiAnalytics: return "2"
+        case .lagDetective: return "3"
+        case .cpu: return "4"
+        case .memory: return "5"
+        case .diskNetwork: return "6"
+        case .thermalFan: return "7"
+        case .processes: return "8"
         }
     }
 }

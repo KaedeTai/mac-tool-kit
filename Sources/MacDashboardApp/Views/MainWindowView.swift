@@ -5,16 +5,19 @@ public struct MainWindowView: View {
     @ObservedObject var dashboardVM: DashboardViewModel
     @ObservedObject var lagVM: LagDetectiveViewModel
     @ObservedObject var fanVM: FanControlViewModel
+    @ObservedObject var aiVM: AIAnalyticsViewModel
 
     @MainActor
     public init(
         dashboardVM: DashboardViewModel,
         lagVM: LagDetectiveViewModel,
-        fanVM: FanControlViewModel
+        fanVM: FanControlViewModel,
+        aiVM: AIAnalyticsViewModel
     ) {
         self.dashboardVM = dashboardVM
         self.lagVM = lagVM
         self.fanVM = fanVM
+        self.aiVM = aiVM
     }
 
     public var body: some View {
@@ -197,6 +200,8 @@ public struct MainWindowView: View {
                     switch dashboardVM.selectedTab {
                     case .overview:
                         OverviewView(dashboardVM: dashboardVM, lagVM: lagVM)
+                    case .aiAnalytics:
+                        AIAnalyticsView(viewModel: aiVM)
                     case .lagDetective:
                         LagDetectiveView(dashboardVM: dashboardVM, lagVM: lagVM)
                     case .cpu:
