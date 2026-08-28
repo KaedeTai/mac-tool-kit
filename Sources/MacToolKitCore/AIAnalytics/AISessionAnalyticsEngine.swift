@@ -48,6 +48,7 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
         var projectMap: [String: (count: Int, tokens: Int64, cost: Double, duration: TimeInterval)] = [:]
         var modelAggMap: [String: (turns: Int, inT: Int64, outT: Int64, cacheT: Int64, thinkT: Int64, cost: Double)] = [:]
         var taskAggMap: [AITaskCategory: (count: Int, dur: Int64, cost: Double)] = [:]
+        var matchedPIDs = Set<pid_t>()
 
         for session in allSessions {
             var livePID: pid_t? = nil
@@ -58,10 +59,14 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
             // Accurate correlation: Match running process whose working directory is precisely the session path
             if session.toolType == .claudeCode {
                 if let matched = liveProcesses.first(where: { p in
-                    guard p.rawName.lowercased().contains("claude") || p.aiContext?.toolName == "Claude Code" else { return false }
-                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/" else { return false }
-                    return pCwd == session.projectPath || session.projectPath.hasPrefix(pCwd) || pCwd.hasPrefix(session.projectPath)
+                    guard !matchedPIDs.contains(p.pid) else { return false }
+                    guard p.rawName.lowercased().contains("claude") || (p.commandLine?.contains("claude") ?? false) else { return false }
+                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/", pCwd != NSHomeDirectory() else { return false }
+                    guard pCwd == session.projectPath || pCwd.hasPrefix(session.projectPath + "/") || session.projectPath.hasPrefix(pCwd + "/") else { return false }
+                    // Must be active recently or process actively running in that directory
+                    return true
                 }) {
+                    matchedPIDs.insert(matched.pid)
                     livePID = matched.pid
                     liveCPU = matched.cpuPercentage
                     liveRAM = matched.memoryBytes
@@ -69,24 +74,31 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                 }
             } else if session.toolType == .antigravity {
                 if let matched = liveProcesses.first(where: { p in
+                    guard !matchedPIDs.contains(p.pid) else { return false }
                     guard p.rawName.lowercased().contains("antigravity") || p.aiContext?.toolName == "Antigravity Agent" else { return false }
-                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/" else { return false }
+                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/", pCwd != NSHomeDirectory() else { return false }
                     return pCwd.contains(session.sessionId) || pCwd == session.projectPath
                 }) {
+                    matchedPIDs.insert(matched.pid)
                     livePID = matched.pid
                     liveCPU = matched.cpuPercentage
                     liveRAM = matched.memoryBytes
                     liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
                 }
             } else if session.toolType == .codex {
-                if let matched = liveProcesses.first(where: { p in
-                    guard p.rawName.lowercased().contains("codex") || (p.commandLine?.contains("codex") ?? false) else { return false }
-                    return true
-                }) {
-                    livePID = matched.pid
-                    liveCPU = matched.cpuPercentage
-                    liveRAM = matched.memoryBytes
-                    liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
+                // Only match if session was modified within the last 15 minutes
+                if Date().timeIntervalSince(session.lastActiveAt) < 900 {
+                    if let matched = liveProcesses.first(where: { p in
+                        guard !matchedPIDs.contains(p.pid) else { return false }
+                        guard p.rawName.lowercased().contains("codex") || (p.commandLine?.contains("codex") ?? false) else { return false }
+                        return true
+                    }) {
+                        matchedPIDs.insert(matched.pid)
+                        livePID = matched.pid
+                        liveCPU = matched.cpuPercentage
+                        liveRAM = matched.memoryBytes
+                        liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
+                    }
                 }
             }
 

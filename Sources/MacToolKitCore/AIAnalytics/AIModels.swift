@@ -224,6 +224,16 @@ public struct AISessionRecord: Identifiable, Sendable {
         }
     }
 
+    public var formattedTimeRange: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let startStr = formatter.string(from: startedAt)
+        let endFormatter = DateFormatter()
+        endFormatter.dateFormat = "HH:mm"
+        let endStr = endFormatter.string(from: lastActiveAt)
+        return "\(startStr) ~ \(endStr) (歷時 \(formattedDuration))"
+    }
+
     public init(
         sessionId: String,
         sessionShortId: String? = nil,

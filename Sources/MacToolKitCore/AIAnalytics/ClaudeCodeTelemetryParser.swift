@@ -6,69 +6,67 @@ public final class ClaudeCodeTelemetryParser: Sendable {
 
     public init() {}
 
-    public func parseAllSessions(limit: Int = 30) -> [AISessionRecord] {
-        let fileManager = FileManager.default
+    public func parseAllSessions(limit: Int = 40) -> [AISessionRecord] {
         let homeDir = NSHomeDirectory()
-        let projectsDir = URL(fileURLWithPath: "\(homeDir)/.claude/projects")
+        let claudeProjectsDir = URL(fileURLWithPath: "\(homeDir)/.claude/projects")
 
-        guard let projectFolders = try? fileManager.contentsOfDirectory(at: projectsDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]) else {
+        let fileManager = FileManager.default
+        guard let projectFolders = try? fileManager.contentsOfDirectory(
+            at: claudeProjectsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
             return []
         }
 
-        var candidateFiles: [(url: URL, modDate: Date)] = []
+        var allSessionFiles: [(url: URL, modDate: Date)] = []
 
         for folder in projectFolders {
-            guard let files = try? fileManager.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
+            guard let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory, isDir else {
                 continue
             }
 
-            let jsonlFiles = files.filter { $0.pathExtension == "jsonl" }
-            for jsonl in jsonlFiles {
-                let modDate = (try? jsonl.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date.distantPast
-                candidateFiles.append((jsonl, modDate))
+            guard let files = try? fileManager.contentsOfDirectory(
+                at: folder,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+
+            for file in files where file.pathExtension == "jsonl" {
+                let modDate = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date.distantPast
+                allSessionFiles.append((url: file, modDate: modDate))
             }
         }
 
-        // Sort by modification date and take top 25 most recent files
-        candidateFiles.sort { $0.modDate > $1.modDate }
-        let topFiles = candidateFiles.prefix(limit)
+        // Sort by most recent
+        allSessionFiles.sort { $0.modDate > $1.modDate }
 
         var sessions: [AISessionRecord] = []
-        for item in topFiles {
+        for item in allSessionFiles.prefix(limit * 2) {
             if let record = parseSessionFile(url: item.url) {
                 sessions.append(record)
+                if sessions.count >= limit {
+                    break
+                }
             }
         }
 
-        sessions.sort { $0.lastActiveAt > $1.lastActiveAt }
         return sessions
     }
 
     public func parseSessionFile(url: URL) -> AISessionRecord? {
         let sessionId = url.deletingPathExtension().lastPathComponent
-        guard sessionId.count >= 8 else { return nil }
-
-        // Read efficiently with maximum 2MB slice if file is huge
-        guard let fileHandle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? fileHandle.close() }
-
-        let fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-        let data: Data
-        if fileSize > 2_000_000 {
-            // Read tail 2MB
-            let offset = max(0, UInt64(fileSize - 2_000_000))
-            try? fileHandle.seek(toOffset: offset)
-            data = fileHandle.readDataToEndOfFile()
-        } else {
-            data = fileHandle.readDataToEndOfFile()
+        guard let data = try? Data(contentsOf: url),
+              let content = String(data: data, encoding: .utf8) else {
+            return nil
         }
 
-        guard let content = String(data: data, encoding: .utf8) else { return nil }
         let lines = content.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !lines.isEmpty else { return nil }
 
-        var projectName = "Workspace"
-        var projectPath = ""
+        var firstCwd: String? = nil
         var gitBranch: String? = nil
         var startedAt: Date = Date()
         var lastActiveAt: Date = Date.distantPast
@@ -94,12 +92,11 @@ public final class ClaudeCodeTelemetryParser: Sendable {
                 continue
             }
 
-            // Extract session metadata from line
-            if let cwd = obj["cwd"] as? String, !cwd.isEmpty {
-                projectPath = cwd
-                projectName = URL(fileURLWithPath: cwd).lastPathComponent
+            // Extract session metadata from initial line
+            if firstCwd == nil, let cwd = obj["cwd"] as? String, !cwd.isEmpty, cwd != "/" {
+                firstCwd = cwd
             }
-            if let branch = obj["gitBranch"] as? String, !branch.isEmpty {
+            if gitBranch == nil, let branch = obj["gitBranch"] as? String, !branch.isEmpty {
                 gitBranch = branch
             }
             if let timeStr = obj["timestamp"] as? String, let date = dateFormatter.date(from: timeStr) ?? ISO8601DateFormatter().date(from: timeStr) {
@@ -138,127 +135,136 @@ public final class ClaudeCodeTelemetryParser: Sendable {
                 totalCacheWriteTokens += cacheWrite
                 totalThinkingTokens += thinking
 
-                var current = modelMap[model] ?? (turns: 0, input: 0, output: 0, cacheRead: 0, thinking: 0)
-                current.turns += 1
-                current.input += inTokens
-                current.output += outTokens
-                current.cacheRead += cacheRead
-                current.thinking += thinking
-                modelMap[model] = current
+                var currentModel = modelMap[model] ?? (turns: 0, input: 0, output: 0, cacheRead: 0, thinking: 0)
+                currentModel.turns += 1
+                currentModel.input += inTokens
+                currentModel.output += outTokens
+                currentModel.cacheRead += cacheRead
+                currentModel.thinking += thinking
+                modelMap[model] = currentModel
 
-                // Tool detection in content
-                var taskCat: AITaskCategory = .planning
-                var taskDesc = "思考與規劃架構"
+                // Parse content for tools
+                var turnTaskCat: AITaskCategory = thinking > 0 ? .planning : .other
+                var turnTaskDesc = "AI 思考與推理"
 
                 if let contentArr = msg["content"] as? [[String: Any]] {
                     for item in contentArr {
-                        if let type = item["type"] as? String, type == "tool_use" {
-                            totalToolCalls += 1
-                            let toolName = (item["name"] as? String) ?? "Tool"
-                            let input = (item["input"] as? [String: Any]) ?? [:]
+                        if let type = item["type"] as? String {
+                            if type == "tool_use" {
+                                totalToolCalls += 1
+                                let toolName = (item["name"] as? String) ?? "tool"
+                                let inputObj = item["input"] as? [String: Any]
 
-                            if toolName.lowercased().contains("bash") || toolName.lowercased().contains("command") {
-                                let cmd = (input["command"] as? String) ?? ""
-                                if cmd.contains("pytest") || cmd.contains("test") || cmd.contains("cargo test") || cmd.contains("swift test") {
-                                    taskCat = .testing
-                                    taskDesc = "執行單元測試: \(cmd.prefix(40))"
-                                } else {
-                                    taskCat = .bashCommand
-                                    taskDesc = "終端指令: \(cmd.prefix(40))"
+                                switch toolName.lowercased() {
+                                case "bash", "terminal", "run_command":
+                                    let cmd = (inputObj?["command"] as? String) ?? (inputObj?["CommandLine"] as? String) ?? ""
+                                    if cmd.contains("test") || cmd.contains("pytest") || cmd.contains("swift test") || cmd.contains("jest") {
+                                        turnTaskCat = .testing
+                                        turnTaskDesc = "執行測試: \(cmd.prefix(60))"
+                                    } else if cmd.contains("git ") {
+                                        turnTaskCat = .bashCommand
+                                        turnTaskDesc = "Git 操作: \(cmd.prefix(60))"
+                                    } else {
+                                        turnTaskCat = .bashCommand
+                                        turnTaskDesc = "執行終端指令: \(cmd.prefix(60))"
+                                    }
+                                case "fileedit", "edit", "replace_file_content", "write_to_file":
+                                    let path = (inputObj?["file_path"] as? String) ?? (inputObj?["TargetFile"] as? String) ?? ""
+                                    let fname = URL(fileURLWithPath: path).lastPathComponent
+                                    turnTaskCat = .codeEdit
+                                    turnTaskDesc = "代碼修改: \(fname)"
+                                case "grep", "grep_search", "find_by_name", "view_file", "view":
+                                    turnTaskCat = .codeSearch
+                                    turnTaskDesc = "搜尋與檢索代碼: \(toolName)"
+                                case "websearch", "read_url_content":
+                                    turnTaskCat = .web
+                                    turnTaskDesc = "查閱網路與文檔"
+                                default:
+                                    turnTaskCat = .other
+                                    turnTaskDesc = "調用工具: \(toolName)"
                                 }
-                            } else if toolName.lowercased().contains("edit") || toolName.lowercased().contains("replace") || toolName.lowercased().contains("write") {
-                                taskCat = .codeEdit
-                                let target = (input["target_file"] as? String) ?? (input["TargetFile"] as? String) ?? "代碼檔案"
-                                taskDesc = "修改代碼: \(URL(fileURLWithPath: target).lastPathComponent)"
-                            } else if toolName.lowercased().contains("grep") || toolName.lowercased().contains("search") || toolName.lowercased().contains("view") || toolName.lowercased().contains("read") {
-                                taskCat = .codeSearch
-                                taskDesc = "搜尋代碼庫: \(toolName)"
-                            } else if toolName.lowercased().contains("web") || toolName.lowercased().contains("url") {
-                                taskCat = .web
-                                taskDesc = "網頁查閱: \(toolName)"
-                            } else {
-                                taskCat = .other
-                                taskDesc = "呼叫工具: \(toolName)"
+                            } else if type == "thinking" {
+                                turnTaskCat = .planning
+                                turnTaskDesc = "深度架構思考 (Thinking)"
                             }
                         }
                     }
                 }
 
-                var taskUsage = taskMap[taskCat] ?? (count: 0, durationMs: 0, input: 0, output: 0)
-                taskUsage.count += 1
-                taskUsage.input += inTokens
-                taskUsage.output += outTokens
-                taskMap[taskCat] = taskUsage
-
-                let turnDate = (obj["timestamp"] as? String).flatMap { dateFormatter.date(from: $0) } ?? startedAt
-                turns.append(AITurnRecord(
+                // Record Turn
+                let turnRecord = AITurnRecord(
                     turnIndex: turns.count + 1,
-                    timestamp: turnDate,
-                    durationMs: 0,
+                    timestamp: lastActiveAt,
+                    durationMs: 2500,
                     modelName: model,
-                    taskCategory: taskCat,
-                    taskDescription: taskDesc,
+                    taskCategory: turnTaskCat,
+                    taskDescription: turnTaskDesc,
                     inputTokens: inTokens,
                     outputTokens: outTokens,
-                    cacheReadTokens: cacheRead,
-                    thinkingTokens: thinking
-                ))
+                    cacheReadTokens: cacheRead
+                )
+                turns.append(turnRecord)
+
+                var catUsage = taskMap[turnTaskCat] ?? (count: 0, durationMs: 0, input: 0, output: 0)
+                catUsage.count += 1
+                catUsage.input += inTokens
+                catUsage.output += outTokens
+                taskMap[turnTaskCat] = catUsage
             }
         }
 
-        if lastActiveAt == Date.distantPast {
-            lastActiveAt = startedAt
+        guard totalInputTokens + totalOutputTokens + totalCacheReadTokens > 0 else {
+            return nil
         }
-
-        let durationSec = totalDurationMs > 0 ? TimeInterval(totalDurationMs) / 1000.0 : max(1.0, lastActiveAt.timeIntervalSince(startedAt))
 
         // Aggregate models
         var modelsUsed: [AIModelUsage] = []
         var totalCost: Double = 0.0
 
-        for (mName, mStats) in modelMap {
+        for (mName, usage) in modelMap {
             let cost = pricing.calculateCostUSD(
                 model: mName,
-                inputTokens: mStats.input,
-                outputTokens: mStats.output,
-                cacheReadTokens: mStats.cacheRead,
-                thinkingTokens: mStats.thinking
+                inputTokens: usage.input,
+                outputTokens: usage.output,
+                cacheReadTokens: usage.cacheRead,
+                cacheWriteTokens: 0,
+                thinkingTokens: usage.thinking
             )
             totalCost += cost
             modelsUsed.append(AIModelUsage(
                 modelName: mName,
-                turnCount: mStats.turns,
-                inputTokens: mStats.input,
-                outputTokens: mStats.output,
-                cacheReadTokens: mStats.cacheRead,
-                thinkingTokens: mStats.thinking,
+                turnCount: usage.turns,
+                inputTokens: usage.input,
+                outputTokens: usage.output,
+                cacheReadTokens: usage.cacheRead,
+                thinkingTokens: usage.thinking,
                 estimatedCostUSD: cost
             ))
         }
 
-        // Aggregate task categories
-        let totalTaskTokens = max(1, totalInputTokens + totalOutputTokens)
+        // Aggregate tasks
         var taskBreakdown: [AITaskCategoryUsage] = []
+        let totalTokens = totalInputTokens + totalOutputTokens + totalCacheReadTokens
 
-        for (cat, stats) in taskMap {
-            let taskTokens = stats.input + stats.output
-            let share = Double(taskTokens) / Double(totalTaskTokens)
-            let taskCost = totalCost * share
+        for (cat, usage) in taskMap {
+            let catTokens = usage.input + usage.output
+            let share = totalTokens > 0 ? Double(catTokens) / Double(totalTokens) : 0.0
+            let catCost = totalCost * share
+
             taskBreakdown.append(AITaskCategoryUsage(
                 category: cat,
-                callCount: stats.count,
-                totalDurationMs: stats.durationMs,
+                callCount: usage.count,
+                totalDurationMs: usage.durationMs,
                 tokenShare: share,
-                estimatedCostUSD: taskCost
+                estimatedCostUSD: catCost
             ))
         }
+        taskBreakdown.sort { $0.estimatedCostUSD > $1.estimatedCostUSD }
 
-        // Sort breakdowns
-        modelsUsed.sort { $0.turnCount > $1.turnCount }
-        taskBreakdown.sort { $0.callCount > $1.callCount }
+        let durationSec: TimeInterval = totalDurationMs > 0 ? Double(totalDurationMs) / 1000.0 : max(1.0, lastActiveAt.timeIntervalSince(startedAt))
 
         let folderName = url.deletingLastPathComponent().lastPathComponent
-        let identity = resolveProjectIdentity(folderName: folderName, cwd: projectPath)
+        let identity = resolveProjectIdentity(folderName: folderName, firstCwd: firstCwd)
 
         let tokenSummary = AITokenUsageSummary(
             inputTokens: totalInputTokens,
@@ -268,15 +274,13 @@ public final class ClaudeCodeTelemetryParser: Sendable {
             thinkingTokens: totalThinkingTokens
         )
 
-        let resolvedPath = identity.effectivePath.isEmpty ? (projectPath.isEmpty ? "\(NSHomeDirectory())/.claude/projects/\(folderName)" : projectPath) : identity.effectivePath
-
         return AISessionRecord(
             sessionId: sessionId,
             sessionShortId: String(sessionId.prefix(8)),
             toolType: .claudeCode,
             projectName: identity.projectName,
             parentProjectName: identity.parentProjectName,
-            projectPath: resolvedPath,
+            projectPath: identity.projectPath,
             gitBranch: gitBranch,
             isSubagent: identity.isSubagent,
             subagentSlug: identity.subagentSlug,
@@ -294,76 +298,70 @@ public final class ClaudeCodeTelemetryParser: Sendable {
         )
     }
 
-    private func resolveProjectIdentity(folderName: String, cwd: String?) -> (projectName: String, parentProjectName: String, isSubagent: Bool, subagentSlug: String?, effectivePath: String) {
+    private func resolveProjectIdentity(folderName: String, firstCwd: String?) -> (projectName: String, parentProjectName: String, isSubagent: Bool, subagentSlug: String?, projectPath: String) {
         let fileManager = FileManager.default
 
-        // 1. If cwd is present in lines (e.g. /Users/peterting/Documents/Cowork/AI顧問服務/webapp/.claude/worktrees/amazing-banach-b40a81)
-        if let c = cwd, !c.isEmpty, c != "/" {
-            var cleanCwd = c
-            if cleanCwd.contains("/.claude/worktrees/") {
-                let parts = cleanCwd.components(separatedBy: "/.claude/worktrees/")
-                cleanCwd = parts[0]
-                let slug = parts.count > 1 ? parts[1] : "subagent"
-                let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
-                return (projectName: "🌿 Subagent (\(slug))", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: true, subagentSlug: slug, effectivePath: cleanCwd)
-            }
-
-            // Strip nested worktrees or tmp
-            if cleanCwd.contains("/.claude/") {
-                let parts = cleanCwd.components(separatedBy: "/.claude/")
-                cleanCwd = parts[0]
-                let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
-                return (projectName: "🌿 Subagent (workflow)", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: true, subagentSlug: "workflow", effectivePath: cleanCwd)
-            }
-
-            let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
-            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: false, subagentSlug: nil, effectivePath: cleanCwd)
-        }
-
-        var cleanFolder = folderName.hasPrefix("-") ? String(folderName.dropFirst()) : folderName
-
-        // 2. Check worktree folder name format
-        if cleanFolder.contains("--claude-worktrees-") {
-            let parts = cleanFolder.components(separatedBy: "--claude-worktrees-")
-            let parentRaw = parts[0]
+        // 1. Worktree folder format (e.g. -Users-peterting-Documents-artogo-aeo-dashboard--claude-worktrees-quizzical-kowalevski-b2c78d)
+        if folderName.contains("--claude-worktrees-") {
+            let parts = folderName.components(separatedBy: "--claude-worktrees-")
+            let parentFolder = parts[0]
             let slug = parts.count > 1 ? parts[1] : "worktree-subagent"
-            let parentPath = "/" + parentRaw.replacingOccurrences(of: "-", with: "/")
-            let parentName = URL(fileURLWithPath: parentPath).lastPathComponent
-            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: parentName.isEmpty ? "Workspace" : parentName, isSubagent: true, subagentSlug: slug, effectivePath: parentPath)
+            let parentResolved = resolveProjectIdentity(folderName: parentFolder, firstCwd: firstCwd)
+            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: parentResolved.parentProjectName, isSubagent: true, subagentSlug: slug, projectPath: parentResolved.projectPath)
         }
 
-        // 3. Match against real directory on disk (e.g. ai-driven-company-docs-design-site)
-        let segments = cleanFolder.components(separatedBy: "-")
-        var accumulated = ""
-        var longestExisting = ""
-        for seg in segments {
-            let nextCandidate = accumulated.isEmpty ? "/" + seg : accumulated + "/" + seg
-            let nextCandidateHyphen = accumulated.isEmpty ? seg : accumulated + "-" + seg
+        // 2. Subagent runner format (e.g. -Users-peterting--claude-double-shot-latte)
+        if folderName.contains("--claude-") {
+            let parts = folderName.components(separatedBy: "--claude-")
+            let slug = parts.count > 1 ? parts[1] : "subagent"
+            if let cwd = firstCwd, !cwd.isEmpty, cwd != "/", cwd != NSHomeDirectory() {
+                var cleanCwd = cwd
+                if cleanCwd.contains("/.claude/worktrees/") {
+                    cleanCwd = cleanCwd.components(separatedBy: "/.claude/worktrees/")[0]
+                }
+                let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
+                return (projectName: "🌿 Subagent (\(slug))", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: true, subagentSlug: slug, projectPath: cleanCwd)
+            }
+            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: "Claude Subagent", isSubagent: true, subagentSlug: slug, projectPath: "\(NSHomeDirectory())/.claude")
+        }
 
-            if fileManager.fileExists(atPath: nextCandidate) {
-                longestExisting = nextCandidate
-                accumulated = nextCandidate
-            } else if fileManager.fileExists(atPath: nextCandidateHyphen) {
-                longestExisting = nextCandidateHyphen
-                accumulated = nextCandidateHyphen
-            } else {
-                accumulated = nextCandidate
+        // 3. Search exact filesystem path
+        let cleanFolder = folderName.hasPrefix("-") ? String(folderName.dropFirst()) : folderName
+
+        let baseDirs = [
+            "/Users/peterting/Documents/program",
+            "/Users/peterting/Documents/artogo",
+            "/Users/peterting/Documents/Cowork/AI顧問服務",
+            "/Users/peterting/Documents",
+            "/Users/peterting"
+        ]
+
+        for base in baseDirs {
+            let baseEncoded = String(base.replacingOccurrences(of: "/", with: "-").dropFirst())
+            if cleanFolder.hasPrefix(baseEncoded + "-") {
+                let remainder = String(cleanFolder.dropFirst(baseEncoded.count + 1))
+
+                let candidatePath = "\(base)/\(remainder)"
+                if fileManager.fileExists(atPath: candidatePath) {
+                    return (projectName: "👑 主 Session (\(remainder))", parentProjectName: remainder, isSubagent: false, subagentSlug: nil, projectPath: candidatePath)
+                }
+
+                if let children = try? fileManager.contentsOfDirectory(atPath: base) {
+                    for child in children where !child.hasPrefix(".") {
+                        if remainder == child {
+                            let fullPath = "\(base)/\(child)"
+                            return (projectName: "👑 主 Session (\(child))", parentProjectName: child, isSubagent: false, subagentSlug: nil, projectPath: fullPath)
+                        } else if remainder.hasPrefix(child + "-") {
+                            let subSlug = String(remainder.dropFirst(child.count + 1))
+                            let fullPath = "\(base)/\(child)"
+                            return (projectName: "🌿 Subagent (\(subSlug))", parentProjectName: child, isSubagent: true, subagentSlug: subSlug, projectPath: fullPath)
+                        }
+                    }
+                }
             }
         }
 
-        if !longestExisting.isEmpty && longestExisting != "/" {
-            let pName = URL(fileURLWithPath: longestExisting).lastPathComponent
-            let remainder = cleanFolder.replacingOccurrences(of: longestExisting.replacingOccurrences(of: "/", with: "-"), with: "")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-            if !remainder.isEmpty && remainder != pName {
-                return (projectName: "🌿 Subagent (\(remainder))", parentProjectName: pName, isSubagent: true, subagentSlug: remainder, effectivePath: longestExisting)
-            }
-            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName, isSubagent: false, subagentSlug: nil, effectivePath: longestExisting)
-        }
-
-        let parsedPath = cleanFolder.replacingOccurrences(of: "-", with: "/")
-        let pName = URL(fileURLWithPath: parsedPath).lastPathComponent
-        let finalName = pName.isEmpty ? "Workspace" : pName
-        return (projectName: "👑 主 Session (\(finalName))", parentProjectName: finalName, isSubagent: false, subagentSlug: nil, effectivePath: "")
+        let pName = cleanFolder.components(separatedBy: "-").last ?? "Workspace"
+        return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName, isSubagent: false, subagentSlug: nil, projectPath: "/Users/peterting/\(pName)")
     }
 }

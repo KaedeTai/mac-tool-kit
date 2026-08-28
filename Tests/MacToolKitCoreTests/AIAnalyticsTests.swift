@@ -96,5 +96,23 @@ final class AIAnalyticsTests: XCTestCase {
         XCTAssertNotNil(summary)
         XCTAssertGreaterThanOrEqual(summary.totalSessionsCount, 0)
         XCTAssertGreaterThanOrEqual(summary.projectWorkspaces.count, 0)
+
+        print("\n================== REAL WORLD SUMMARY ==================")
+        print("Active Sessions Count: \(summary.activeSessions.count)")
+        for a in summary.activeSessions {
+            print("  🟢 ACTIVE: [\(a.parentProjectName)] \(a.projectName) | PID: \(a.livePID ?? 0) | CPU: \(a.liveCPU ?? 0)% | Path: \(a.projectPath)")
+        }
+
+        print("\nProject Workspaces Count: \(summary.projectWorkspaces.count)")
+        for ws in summary.projectWorkspaces {
+            print("📁 WORKSPACE: [\(ws.projectName)] (Mains: \(ws.mainSessions.count), Subs: \(ws.subagentSessions.count), Tokens: \(ws.totalTokens), Cost: $\(String(format: "%.2f", ws.totalCostUSD)))")
+            for m in ws.mainSessions {
+                print("   👑 Main: #\(m.sessionShortId) | Cost: $\(String(format: "%.2f", m.estimatedCostUSD)) | Range: \(m.formattedTimeRange)")
+            }
+            for s in ws.subagentSessions {
+                print("   🌿 Sub: (\(s.subagentSlug ?? "sub")) | Cost: $\(String(format: "%.2f", s.estimatedCostUSD)) | Range: \(s.formattedTimeRange)")
+            }
+        }
+        print("========================================================\n")
     }
 }

@@ -524,12 +524,18 @@ struct SessionDetailInspectorView: View {
     let session: AISessionRecord
     @ObservedObject var viewModel: AIAnalyticsViewModel
 
+    private var timeFormatter: DateFormatter {
+        let df = DateFormatter()
+        df.dateFormat = "HH:mm:ss"
+        return df
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 // Header Info
-                HStack {
-                    VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
                         HStack(spacing: 8) {
                             Text(session.isSubagent ? "🌿 Subagent 工作流" : "👑 主 Session")
                                 .font(.system(size: 11, weight: .bold))
@@ -552,27 +558,77 @@ struct SessionDetailInspectorView: View {
                                     .cornerRadius(4)
                             }
                         }
-                        Text("所屬專案: \(session.parentProjectName) • Session ID: \(session.sessionId)")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(viewModel.formatCost(session.estimatedCostUSD))
+                                .font(.system(size: 18, weight: .bold, design: .monospaced))
+                                .foregroundColor(.purple)
+                            Text("該 Session 耗用 \(viewModel.formatTokens(session.tokenUsage.totalTokens)) Tokens")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
                     }
 
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(viewModel.formatCost(session.estimatedCostUSD))
-                            .font(.system(size: 18, weight: .bold, design: .monospaced))
-                            .foregroundColor(.purple)
-                        Text("該 Session 耗用 \(viewModel.formatTokens(session.tokenUsage.totalTokens)) Tokens")
-                            .font(.system(size: 10))
+                    // Detailed Time Range & Path
+                    HStack(spacing: 12) {
+                        Label(session.formattedTimeRange, systemImage: "clock.fill")
+                            .font(.system(size: 11, weight: .medium))
                             .foregroundColor(.secondary)
+
+                        Spacer()
+
+                        Text("路徑: \(session.projectPath)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary.opacity(0.8))
+                            .lineLimit(1)
                     }
                 }
                 .padding(12)
                 .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
                 .cornerRadius(8)
 
-                // 1. Models Used
+                // 1. Token Velocity Sparkline & Activity Heatmap
+                if !session.turns.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text("📊 各對話輪次 (Turns) Token 消耗趨勢與尖峰分佈")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("共 \(session.turns.count) 個對話輪次")
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+
+                        let maxTurnTokens = Double(session.turns.map { $0.inputTokens + $0.outputTokens + $0.cacheReadTokens }.max() ?? 1)
+                        HStack(alignment: .bottom, spacing: 3) {
+                            ForEach(Array(session.turns.prefix(30).enumerated()), id: \.offset) { idx, turn in
+                                let tTotal = Double(turn.inputTokens + turn.outputTokens + turn.cacheReadTokens)
+                                let ratio = max(0.08, min(1.0, tTotal / max(1.0, maxTurnTokens)))
+                                let isSpike = ratio > 0.65
+
+                                VStack(spacing: 2) {
+                                    RoundedRectangle(cornerRadius: 2)
+                                        .fill(isSpike ? Color.red : (turn.taskCategory == .planning ? Color.purple : Color.blue))
+                                        .frame(height: max(4, CGFloat(ratio * 36)))
+
+                                    Text("#\(turn.turnIndex)")
+                                        .font(.system(size: 8, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                }
+                                .help("Turn #\(turn.turnIndex) (\(timeFormatter.string(from: turn.timestamp))): \(viewModel.formatTokens(Int64(tTotal))) Tokens - \(turn.taskDescription)")
+                            }
+                        }
+                        .frame(height: 52)
+                        .padding(8)
+                        .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+                        .cornerRadius(6)
+                    }
+                }
+
+                // 2. Models Used
                 VStack(alignment: .leading, spacing: 6) {
                     Text("🧠 調用模型與開銷分佈 (Models Used)")
                         .font(.system(size: 12, weight: .bold))
@@ -600,7 +656,7 @@ struct SessionDetailInspectorView: View {
                     }
                 }
 
-                // 2. Task Category Breakdown
+                // 3. Task Category Breakdown
                 VStack(alignment: .leading, spacing: 6) {
                     Text("📋 工作類型與 Token 佔比 (Tasks Breakdown)")
                         .font(.system(size: 12, weight: .bold))
@@ -632,7 +688,7 @@ struct SessionDetailInspectorView: View {
                     }
                 }
 
-                // 3. Token Granular Structure
+                // 4. Token Granular Structure
                 VStack(alignment: .leading, spacing: 6) {
                     Text("🪙 該 Session 獨立 Token 結構明細")
                         .font(.system(size: 12, weight: .bold))
@@ -648,20 +704,25 @@ struct SessionDetailInspectorView: View {
                     }
                 }
 
-                // 4. Chronological Turns Timeline
+                // 5. Chronological Turns Timeline with Timestamps
                 if !session.turns.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("⏱️ 對話與任務時間軸 (Chronological Turns: \(session.turns.count))")
+                        Text("⏱️ 對話與任務精準時間軸 (Chronological Turns: \(session.turns.count))")
                             .font(.system(size: 12, weight: .bold))
                             .foregroundColor(.secondary)
 
                         LazyVStack(spacing: 6) {
-                            ForEach(session.turns.prefix(20)) { turn in
+                            ForEach(session.turns.prefix(25)) { turn in
                                 HStack(spacing: 8) {
                                     Text("#\(turn.turnIndex)")
                                         .font(.system(size: 10, weight: .bold, design: .monospaced))
                                         .foregroundColor(.secondary)
                                         .frame(width: 24, alignment: .leading)
+
+                                    Text(timeFormatter.string(from: turn.timestamp))
+                                        .font(.system(size: 10, design: .monospaced))
+                                        .foregroundColor(.secondary)
+                                        .frame(width: 58, alignment: .leading)
 
                                     Image(systemName: turn.taskCategory.iconName)
                                         .font(.system(size: 10))
@@ -674,7 +735,7 @@ struct SessionDetailInspectorView: View {
                                     Spacer()
 
                                     if let m = turn.modelName {
-                                        Text(m.replacingOccurrences(of: "claude-", with: ""))
+                                        Text(m.replacingOccurrences(of: "claude-", with: "").replacingOccurrences(of: "gemini-", with: ""))
                                             .font(.system(size: 9, design: .monospaced))
                                             .foregroundColor(.secondary)
                                     }
