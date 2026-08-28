@@ -40,6 +40,21 @@ public final class ProcessMonitor: @unchecked Sendable {
         }
     }
 
+    private func getAntigravityActiveModelName() -> String {
+        let stateUrl = URL(fileURLWithPath: NSHomeDirectory() + "/.gemini/antigravity/antigravity_state.pbtxt")
+        guard let content = try? String(contentsOf: stateUrl, encoding: .utf8) else { return "Gemini" }
+        for line in content.components(separatedBy: .newlines) {
+            if line.contains("last_selected_agent_model:") {
+                if line.contains("M132") { return "Gemini 3.7 Flash High" }
+                if line.contains("M16") { return "Gemini 3.1 Pro High" }
+                if line.contains("M131") { return "Gemini 3.7 Flash" }
+                if line.contains("M15") { return "Gemini 3.1 Pro" }
+                if line.contains("M11") { return "Gemini 2.5 Pro" }
+            }
+        }
+        return "Gemini"
+    }
+
     public func sampleProcesses(limit: Int = 80) -> [ProcessItem] {
         lock.lock()
         defer { lock.unlock() }
@@ -341,7 +356,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         // 1. Antigravity Agent
         if cwd.contains(".gemini/antigravity") || fullCmd.contains("antigravity") || chainStr.contains("antigravity") {
             tool = "Antigravity Agent"
-            model = "Gemini 2.5 Pro"
+            model = getAntigravityActiveModelName()
             if let brainRange = cwd.range(of: "brain/") {
                 let sub = String(cwd[brainRange.upperBound...])
                 let comp = sub.components(separatedBy: "/")
@@ -393,7 +408,7 @@ public final class ProcessMonitor: @unchecked Sendable {
                 model = "claude-3-7-sonnet"
             } else if trigger.contains("Antigravity") {
                 tool = "Antigravity Agent"
-                model = "Gemini 2.5 Pro"
+                model = getAntigravityActiveModelName()
             } else {
                 tool = "Cursor AI"
                 model = "Claude 3.5 Sonnet"
