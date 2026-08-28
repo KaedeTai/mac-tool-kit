@@ -268,13 +268,15 @@ public final class ClaudeCodeTelemetryParser: Sendable {
             thinkingTokens: totalThinkingTokens
         )
 
+        let resolvedPath = identity.effectivePath.isEmpty ? (projectPath.isEmpty ? "\(NSHomeDirectory())/.claude/projects/\(folderName)" : projectPath) : identity.effectivePath
+
         return AISessionRecord(
             sessionId: sessionId,
             sessionShortId: String(sessionId.prefix(8)),
             toolType: .claudeCode,
             projectName: identity.projectName,
             parentProjectName: identity.parentProjectName,
-            projectPath: projectPath.isEmpty ? "\(NSHomeDirectory())/.claude/projects/\(folderName)" : projectPath,
+            projectPath: resolvedPath,
             gitBranch: gitBranch,
             isSubagent: identity.isSubagent,
             subagentSlug: identity.subagentSlug,
@@ -292,35 +294,76 @@ public final class ClaudeCodeTelemetryParser: Sendable {
         )
     }
 
-    private func resolveProjectIdentity(folderName: String, cwd: String?) -> (projectName: String, parentProjectName: String, isSubagent: Bool, subagentSlug: String?) {
-        var cleanFolder = folderName
-        if cleanFolder.hasPrefix("-") {
-            cleanFolder = String(cleanFolder.dropFirst())
+    private func resolveProjectIdentity(folderName: String, cwd: String?) -> (projectName: String, parentProjectName: String, isSubagent: Bool, subagentSlug: String?, effectivePath: String) {
+        let fileManager = FileManager.default
+
+        // 1. If cwd is present in lines (e.g. /Users/peterting/Documents/Cowork/AI顧問服務/webapp/.claude/worktrees/amazing-banach-b40a81)
+        if let c = cwd, !c.isEmpty, c != "/" {
+            var cleanCwd = c
+            if cleanCwd.contains("/.claude/worktrees/") {
+                let parts = cleanCwd.components(separatedBy: "/.claude/worktrees/")
+                cleanCwd = parts[0]
+                let slug = parts.count > 1 ? parts[1] : "subagent"
+                let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
+                return (projectName: "🌿 Subagent (\(slug))", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: true, subagentSlug: slug, effectivePath: cleanCwd)
+            }
+
+            // Strip nested worktrees or tmp
+            if cleanCwd.contains("/.claude/") {
+                let parts = cleanCwd.components(separatedBy: "/.claude/")
+                cleanCwd = parts[0]
+                let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
+                return (projectName: "🌿 Subagent (workflow)", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: true, subagentSlug: "workflow", effectivePath: cleanCwd)
+            }
+
+            let pName = URL(fileURLWithPath: cleanCwd).lastPathComponent
+            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName.isEmpty ? "Workspace" : pName, isSubagent: false, subagentSlug: nil, effectivePath: cleanCwd)
         }
 
-        // 1. Worktree or subagent pattern (e.g. artogo-aeo-dashboard--claude-worktrees-quizzical-kowalevski-b2c78d)
+        var cleanFolder = folderName.hasPrefix("-") ? String(folderName.dropFirst()) : folderName
+
+        // 2. Check worktree folder name format
         if cleanFolder.contains("--claude-worktrees-") {
             let parts = cleanFolder.components(separatedBy: "--claude-worktrees-")
             let parentRaw = parts[0]
             let slug = parts.count > 1 ? parts[1] : "worktree-subagent"
-            let parentProjName = URL(fileURLWithPath: parentRaw.replacingOccurrences(of: "-", with: "/")).lastPathComponent
-            let fullParent = parentProjName.isEmpty ? "Workspace" : parentProjName
-            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: fullParent, isSubagent: true, subagentSlug: slug)
-        } else if cleanFolder.contains("--claude-") {
-            let parts = cleanFolder.components(separatedBy: "--claude-")
-            let slug = parts.count > 1 ? parts[1] : "claude-subagent"
-            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: "Claude System", isSubagent: true, subagentSlug: slug)
+            let parentPath = "/" + parentRaw.replacingOccurrences(of: "-", with: "/")
+            let parentName = URL(fileURLWithPath: parentPath).lastPathComponent
+            return (projectName: "🌿 Subagent (\(slug))", parentProjectName: parentName.isEmpty ? "Workspace" : parentName, isSubagent: true, subagentSlug: slug, effectivePath: parentPath)
         }
 
-        // 2. Standard main project station
-        if let c = cwd, !c.isEmpty && c != "/" {
-            let pName = URL(fileURLWithPath: c).lastPathComponent
-            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName, isSubagent: false, subagentSlug: nil)
+        // 3. Match against real directory on disk (e.g. ai-driven-company-docs-design-site)
+        let segments = cleanFolder.components(separatedBy: "-")
+        var accumulated = ""
+        var longestExisting = ""
+        for seg in segments {
+            let nextCandidate = accumulated.isEmpty ? "/" + seg : accumulated + "/" + seg
+            let nextCandidateHyphen = accumulated.isEmpty ? seg : accumulated + "-" + seg
+
+            if fileManager.fileExists(atPath: nextCandidate) {
+                longestExisting = nextCandidate
+                accumulated = nextCandidate
+            } else if fileManager.fileExists(atPath: nextCandidateHyphen) {
+                longestExisting = nextCandidateHyphen
+                accumulated = nextCandidateHyphen
+            } else {
+                accumulated = nextCandidate
+            }
+        }
+
+        if !longestExisting.isEmpty && longestExisting != "/" {
+            let pName = URL(fileURLWithPath: longestExisting).lastPathComponent
+            let remainder = cleanFolder.replacingOccurrences(of: longestExisting.replacingOccurrences(of: "/", with: "-"), with: "")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+            if !remainder.isEmpty && remainder != pName {
+                return (projectName: "🌿 Subagent (\(remainder))", parentProjectName: pName, isSubagent: true, subagentSlug: remainder, effectivePath: longestExisting)
+            }
+            return (projectName: "👑 主 Session (\(pName))", parentProjectName: pName, isSubagent: false, subagentSlug: nil, effectivePath: longestExisting)
         }
 
         let parsedPath = cleanFolder.replacingOccurrences(of: "-", with: "/")
         let pName = URL(fileURLWithPath: parsedPath).lastPathComponent
         let finalName = pName.isEmpty ? "Workspace" : pName
-        return (projectName: "👑 主 Session (\(finalName))", parentProjectName: finalName, isSubagent: false, subagentSlug: nil)
+        return (projectName: "👑 主 Session (\(finalName))", parentProjectName: finalName, isSubagent: false, subagentSlug: nil, effectivePath: "")
     }
 }

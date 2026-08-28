@@ -5,6 +5,7 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
 
     private let claudeParser = ClaudeCodeTelemetryParser.shared
     private let antigravityParser = AntigravityTelemetryParser.shared
+    private let codexParser = CodexTelemetryParser.shared
     private let processMonitor = ProcessMonitor()
     private let lock = NSLock()
 
@@ -24,8 +25,9 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
 
         let claudeSessions = claudeParser.parseAllSessions(limit: 25)
         let agySessions = antigravityParser.parseAllSessions(limit: 15)
+        let codexSessions = codexParser.parseAllSessions(limit: 15)
 
-        var allSessions = claudeSessions + agySessions
+        var allSessions = claudeSessions + agySessions + codexSessions
         allSessions.sort { $0.lastActiveAt > $1.lastActiveAt }
 
         // Correlate with live processes to find active sessions
@@ -70,6 +72,16 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                     guard p.rawName.lowercased().contains("antigravity") || p.aiContext?.toolName == "Antigravity Agent" else { return false }
                     guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/" else { return false }
                     return pCwd.contains(session.sessionId) || pCwd == session.projectPath
+                }) {
+                    livePID = matched.pid
+                    liveCPU = matched.cpuPercentage
+                    liveRAM = matched.memoryBytes
+                    liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
+                }
+            } else if session.toolType == .codex {
+                if let matched = liveProcesses.first(where: { p in
+                    guard p.rawName.lowercased().contains("codex") || (p.commandLine?.contains("codex") ?? false) else { return false }
+                    return true
                 }) {
                     livePID = matched.pid
                     liveCPU = matched.cpuPercentage

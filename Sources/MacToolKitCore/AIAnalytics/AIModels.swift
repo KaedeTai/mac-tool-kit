@@ -4,6 +4,7 @@ import Foundation
 public enum AIToolType: String, Codable, Sendable, CaseIterable, Identifiable {
     case claudeCode = "Claude Code"
     case antigravity = "Antigravity Agent"
+    case codex = "OpenAI Codex"
     case cursor = "Cursor AI"
     case ollama = "Ollama / Local LLM"
     case other = "AI Agent"
@@ -14,6 +15,7 @@ public enum AIToolType: String, Codable, Sendable, CaseIterable, Identifiable {
         switch self {
         case .claudeCode: return "terminal.fill"
         case .antigravity: return "brain.head.profile"
+        case .codex: return "cube.transparent.fill"
         case .cursor: return "chevron.left.forwardslash.chevron.right"
         case .ollama: return "cpu"
         case .other: return "sparkles"

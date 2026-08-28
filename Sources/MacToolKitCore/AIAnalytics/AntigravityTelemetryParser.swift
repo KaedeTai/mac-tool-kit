@@ -38,7 +38,7 @@ public final class AntigravityTelemetryParser: Sendable {
         let lines = content.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !lines.isEmpty else { return nil }
 
-        let modelName = "Gemini 2.5 Pro"
+        let modelName = "Gemini 3.7 Flash High"
         var startedAt: Date = Date()
         var lastActiveAt: Date = Date.distantPast
         let projectName = "mac-tool-kit"
