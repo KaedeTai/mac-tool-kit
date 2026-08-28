@@ -158,6 +158,46 @@ public struct MemoryView: View {
                             }
                             .padding(.vertical, 4)
 
+                            // Docker Containers Breakdown
+                            if (proc.rawName.contains("docker") || proc.name.contains("Docker")) && !dashboardVM.dockerContainers.isEmpty {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack {
+                                        Image(systemName: "cube.fill")
+                                            .font(.system(size: 11))
+                                            .foregroundColor(.blue)
+                                        Text("🐳 容器個別記憶體佔用細項 (\(dashboardVM.dockerContainers.count) 個容器)：")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundColor(.blue)
+                                        Spacer()
+                                    }
+                                    .padding(.top, 2)
+
+                                    ForEach(dashboardVM.dockerContainers) { c in
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "shippingbox.fill")
+                                                .font(.system(size: 10))
+                                                .foregroundColor(.blue.opacity(0.8))
+                                            Text(c.name)
+                                                .font(.system(size: 11, weight: .medium))
+                                                .lineLimit(1)
+                                            Spacer()
+                                            Text("CPU \(String(format: "%.1f%%", c.cpuPercentage))")
+                                                .font(.system(size: 10, design: .monospaced))
+                                                .foregroundColor(.secondary)
+                                            Text(c.memoryUsage)
+                                                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                                .foregroundColor(.primary)
+                                        }
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 4)
+                                        .background(Color.blue.opacity(0.08))
+                                        .cornerRadius(6)
+                                    }
+                                }
+                                .padding(.leading, 32)
+                                .padding(.vertical, 4)
+                            }
+
                             Divider()
                         }
 

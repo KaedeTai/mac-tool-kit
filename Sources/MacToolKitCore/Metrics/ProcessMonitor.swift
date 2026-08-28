@@ -370,7 +370,16 @@ public final class ProcessMonitor: @unchecked Sendable {
                 }
             }
             if let cwd = cwdStr {
-                let proj = URL(fileURLWithPath: cwd).lastPathComponent
+                var proj = URL(fileURLWithPath: cwd).lastPathComponent
+                // If it is a worktree folder (e.g. wf_fbda0cb8-24c-1), resolve the meaningful context
+                if proj.hasPrefix("wf_") || proj.hasPrefix("tmp") || proj.hasPrefix("scratch") {
+                    let parent = URL(fileURLWithPath: cwd).deletingLastPathComponent().lastPathComponent
+                    if !parent.isEmpty && parent != "/" && !parent.hasPrefix("wf_") && parent != "var" && parent != "folders" && parent != "T" {
+                        proj = "\(parent) [工作區 \(proj.prefix(12))]"
+                    } else {
+                        proj = "工作區 \(proj.prefix(12))"
+                    }
+                }
                 return (cwd, proj)
             }
         }
@@ -381,7 +390,8 @@ public final class ProcessMonitor: @unchecked Sendable {
         var current = pid
         var chain: [String] = []
         var visited = Set<pid_t>()
-        var devToolName: String?
+        var aiToolName: String?
+        var runnerToolName: String?
         var terminalAppName: String?
 
         while current > 1 && !visited.contains(current) {
@@ -403,23 +413,29 @@ public final class ProcessMonitor: @unchecked Sendable {
                 let name = String(cString: nameBuf)
                 let cleanName = name.isEmpty ? "PID \(current)" : name
 
-                // Detect specific developer tools in the ancestor chain
+                // Detect specific developer tools and AI agents in the ancestor chain
                 let lower = cleanName.lowercased()
-                if devToolName == nil && current != pid {
-                    if lower.contains("claude") || lower.contains("2.1.") {
-                        devToolName = "Claude Code"
-                        chain.append("Claude Code (CLI)")
-                    } else if lower.contains("uv") {
-                        devToolName = "uv 套件管理工具"
-                        chain.append("uv (CLI)")
-                    } else if lower.contains("docker") {
-                        devToolName = "Docker"
+                if current != pid {
+                    if aiToolName == nil && (lower.contains("claude") || lower.contains("2.1.") || lower.contains("claudecode")) {
+                        aiToolName = "Claude Code"
+                        chain.append("Claude Code (Agent)")
+                    } else if aiToolName == nil && (lower.contains("antigravity") || lower.contains("agy")) {
+                        aiToolName = "Antigravity AI Agent"
+                        chain.append("Antigravity (Agent)")
+                    } else if aiToolName == nil && lower.contains("cursor") {
+                        aiToolName = "Cursor AI"
+                        chain.append("Cursor (IDE)")
+                    } else if runnerToolName == nil && lower.contains("uv") {
+                        runnerToolName = "uv"
+                        chain.append("uv (Runner)")
+                    } else if runnerToolName == nil && lower.contains("docker") {
+                        runnerToolName = "Docker"
                         chain.append("Docker (CLI)")
-                    } else if lower.contains("npm") || lower.contains("pnpm") || lower.contains("yarn") {
-                        devToolName = "Node/npm"
+                    } else if runnerToolName == nil && (lower.contains("npm") || lower.contains("pnpm") || lower.contains("yarn") || lower.contains("npx")) {
+                        runnerToolName = cleanName
                         chain.append("\(cleanName) (CLI)")
-                    } else if lower.contains("cargo") {
-                        devToolName = "Cargo (Rust)"
+                    } else if runnerToolName == nil && lower.contains("cargo") {
+                        runnerToolName = "Cargo"
                         chain.append("cargo (CLI)")
                     } else {
                         chain.append(cleanName)
@@ -439,10 +455,23 @@ public final class ProcessMonitor: @unchecked Sendable {
         }
 
         var finalAppName: String?
-        if let dev = devToolName, let term = terminalAppName {
-            finalAppName = "\(dev) (在 \(term) 中)"
-        } else if let dev = devToolName {
-            finalAppName = dev
+        if let ai = aiToolName {
+            var details: [String] = []
+            if let runner = runnerToolName {
+                details.append("透過 \(runner)")
+            }
+            if let term = terminalAppName {
+                details.append("在 \(term) 中")
+            }
+            if details.isEmpty {
+                finalAppName = ai
+            } else {
+                finalAppName = "\(ai) (\(details.joined(separator: ", ")))"
+            }
+        } else if let runner = runnerToolName, let term = terminalAppName {
+            finalAppName = "\(runner) (在 \(term) 中)"
+        } else if let runner = runnerToolName {
+            finalAppName = "\(runner) 執行環境"
         } else if let term = terminalAppName {
             finalAppName = term
         } else {
