@@ -10,12 +10,12 @@
 [![Release](https://img.shields.io/github/v/release/PeterTing/mac-tool-kit?color=purple)](https://github.com/PeterTing/mac-tool-kit/releases/latest)
 
 <p align="center">
-  純原生 <b>Swift 6</b> 與 <b>SwiftUI</b> 構建，具備低資源消耗、毫秒級卡頓排查、全機 8 大元件獨立溫控與精緻毛玻璃質感。
+  純原生 <b>Swift 6</b> 與 <b>SwiftUI</b> 構建，具備極低資源消耗、全機 8 大元件獨立溫控、毫秒級卡頓排查與精緻毛玻璃質感。
 </p>
 
-[📥 下載最新版本 (DMG / ZIP)](https://github.com/PeterTing/mac-tool-kit/releases/latest) •
-[📖 使用方法](#-使用方法指南-usage-guide) •
-[💡 功能特色](#-核心特色-key-features) •
+[📥 下載最新安裝檔 (DMG / ZIP)](https://github.com/PeterTing/mac-tool-kit/releases/latest) •
+[📖 使用方法指南](#-使用方法指南-usage-guide) •
+[💡 核心特色](#-核心特色-key-features) •
 [🤝 貢獻指南](#-貢獻指南-contributing) •
 [🐛 問題回報](#-問題回報與-issue-提交-reporting-issues)
 
@@ -23,19 +23,10 @@
 
 </div>
 
-## 📸 功能截圖 (Screenshots)
+## 📸 實機功能截圖 (Screenshots)
 
-### 1. 全機 8 大元件即時溫度儀表盤與閉迴路風扇控制
-> 支援自由指定「溫控基準元件」（如專門為掌托吹風降溫、為 Apple Silicon SoC 壓溫），並搭載 **-7°C 遲滯防抖演算法**，徹底杜絕臨界點頻繁開關噪音。
-
-<div align="center">
-  <img src="assets/screenshots/thermal_fan_control.png" alt="Thermal Fan Control" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-</div>
-
-<br>
-
-### 2. 即時全景系統效能儀表板 (Overview Dashboard)
-> 一目了然 CPU 各核心即時負載、RAM 記憶體壓力分佈、磁碟 I/O 速率、網路即時上下行 Sparkline 波動曲線與電池健康度。
+### 1. 即時全景系統效能儀表板 (Overview Dashboard)
+> 一目了然全系統 CPU 總量與歷史曲線、RAM 記憶體壓力分佈、磁碟容量與 I/O 速率、網路即時上下行 Sparkline 波動圖與電池健康度。
 
 <div align="center">
   <img src="assets/screenshots/overview_dashboard.png" alt="Overview Dashboard" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
@@ -43,17 +34,26 @@
 
 <br>
 
-### 3. 智慧 Lag 瓶頸診斷器 (Lag Detective) ⚡
-> 1 秒內深度交叉分析全系統瓶頸（CPU 暴衝、RAM 枯竭、Swap 顛簸、熱節流降頻），並提供一鍵釋放記憶體、一鍵關閉卡頓程式等修復方案。
+### 2. 全機 8 大元件即時溫度儀表盤與閉迴路風扇控制 (Thermal & Fan Control)
+> 支援自由指定「溫控基準元件」（如專為掌托吹風降溫、為 Apple Silicon SoC 晶片壓溫），並搭載 **-7°C 遲滯防抖演算法**，徹底杜絕臨界點頻繁開關噪音。
 
 <div align="center">
-  <img src="assets/screenshots/lag_detective.png" alt="Lag Detective" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
+  <img src="assets/screenshots/thermal_fan_control.png" alt="Thermal Fan Control" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
+</div>
+
+<br>
+
+### 3. 實體記憶體架構與一鍵快取釋放 (Memory RAM Inspector)
+> 深入可視化活躍 (Active)、聯動 (Wired)、壓縮 (Compressed) 與可用記憶體，監控 Swap 交換區狀態，並支援 **一鍵釋放系統快取 (Purge RAM)**。
+
+<div align="center">
+  <img src="assets/screenshots/memory_inspector.png" alt="Memory Inspector" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
 </div>
 
 <br>
 
 ### 4. 行程資源監控與檢查器 (Process Inspector)
-> 支援使用者 App / 系統後台一鍵過濾、關鍵字即時搜尋、按 CPU / RAM 排序與一鍵強制結束 (Force Quit) 或降權。
+> 支援使用者 App / 系統背景進程一鍵過濾、關鍵字即時搜尋、按 CPU / RAM 佔用即時排序，並提供一鍵強制結束 (Force Quit) 功能。
 
 <div align="center">
   <img src="assets/screenshots/process_inspector.png" alt="Process Inspector" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
@@ -73,9 +73,10 @@
   - 🌪️ **散熱鰭片與出風口 (Heatsink)**：螢幕轉軸下方散熱鰭片與風道溫度。
   - 💾 **SSD 固態硬碟 (NVMe Storage)**：隨即時 I/O 讀寫吞吐量（MB/s）動態跳動。
 - ❄️ **自訂基準元件閉迴路調速 (Sensor-Based Fan Control)**：
-  - 點選任一元件卡片，即可將其設為專屬散熱基準（例如：專門冷卻掌托防止打字手燙）。
+  - 點選任一元件卡片，即可將其設為專屬散熱基準（例如：專門冷卻掌托防止打字手燙、專門冷卻 SoC 晶片）。
   - **-7°C 寬廣遲滯防抖演算法**：升速門檻 $\ge \text{Target} + 0.8^\circ\text{C}$，降速門檻 $< \text{Target} - 7.0^\circ\text{C}$，杜絕頻繁開關噪音。
   - **強效極限壓溫 (Max Turbo)**：起步 3,800 RPM，超溫時輸出 5,100+ RPM 渦輪大風量快速壓溫。
+  - **特權硬體控制 (XPC Mach SMC Root Controller)**：相容 Macs Fan Control XPC SMC 協議與內建 Helper，支援手動滑桿與一鍵完整卸載還原原廠。
 - ⚡ **智慧 Lag 瓶頸診斷器 (Lag Detective)**：
   - 毫秒級自動歸因卡頓根因，並提供一鍵釋放記憶體 (Purge RAM)、一鍵全速降溫等救急功能。
 - 🎛️ **雙模態視覺體驗**：
