@@ -79,6 +79,30 @@ public struct ThermalFanView: View {
                     .cornerRadius(10)
                 }
 
+                // Monitoring Profile & Eco Mode Banner
+                HStack {
+                    Image(systemName: dashboardVM.monitoringProfile == .fanOnlyEco ? "leaf.fill" : "bolt.fill")
+                        .foregroundColor(dashboardVM.monitoringProfile == .fanOnlyEco ? .green : .blue)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("背景監控效能模式：\(dashboardVM.monitoringProfile.title)")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(dashboardVM.monitoringProfile.description)
+                            .font(.system(size: 10))
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
+                    Picker("", selection: $dashboardVM.monitoringProfile) {
+                        ForEach(MonitoringProfile.allCases) { p in
+                            Text(p.shortTitle).tag(p)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 240)
+                }
+                .padding(10)
+                .background(Color(nsColor: .controlBackgroundColor).opacity(0.4))
+                .cornerRadius(8)
+
                 // Helper Activation Card
                 if !fanVM.isHelperRunning {
                     GlassCard(title: "硬體風扇特權控制 (Hardware Fan Control)", iconName: "lock.shield.fill", accentColor: .blue) {

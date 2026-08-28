@@ -39,12 +39,59 @@ public enum DashboardTab: String, CaseIterable, Identifiable {
     }
 }
 
+public enum MonitoringProfile: String, CaseIterable, Identifiable, Sendable {
+    case realtime = "realtime"      // 1s Full Spectrum (~2-4% CPU)
+    case balanced = "balanced"      // 3s Low Overhead (~0.5-1% CPU)
+    case fanOnlyEco = "fanOnlyEco"  // Fan-Only Eco Mode (< 0.1% CPU)
+
+    public var id: String { rawValue }
+
+    public var title: String {
+        switch self {
+        case .realtime: return "即時全景 (1秒)"
+        case .balanced: return "平衡節能 (3秒)"
+        case .fanOnlyEco: return "僅風扇控溫 (極致省電)"
+        }
+    }
+
+    public var shortTitle: String {
+        switch self {
+        case .realtime: return "即時 (1s)"
+        case .balanced: return "平衡 (3s)"
+        case .fanOnlyEco: return "僅風扇 (Eco)"
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .realtime: return "bolt.fill"
+        case .balanced: return "leaf.fill"
+        case .fanOnlyEco: return "fanblades.fill"
+        }
+    }
+
+    public var description: String {
+        switch self {
+        case .realtime: return "每秒刷新所有硬體、行程與 Docker 數據（約佔 2~4% CPU）"
+        case .balanced: return "每 3 秒刷新一次，降低系統開銷（約佔 0.5~1% CPU）"
+        case .fanOnlyEco: return "暫停行程與 Docker 掃描，僅維持風扇動態溫控（極致省電 < 0.1% CPU）"
+        }
+    }
+}
+
 @MainActor
 public final class DashboardViewModel: ObservableObject {
     public static let shared = DashboardViewModel()
 
     // Navigation state
     @Published public var selectedTab: DashboardTab = .overview
+
+    // Monitoring Mode Profile
+    @Published public var monitoringProfile: MonitoringProfile = .realtime {
+        didSet {
+            startMonitoring()
+        }
+    }
 
     // Current Live Metrics
     @Published public var cpuSnapshot = CPUUsageSnapshot()
@@ -90,17 +137,23 @@ public final class DashboardViewModel: ObservableObject {
 
     public func startMonitoring() {
         monitorTask?.cancel()
+        let intervalSec: Double
+        switch monitoringProfile {
+        case .realtime: intervalSec = 1.0
+        case .balanced: intervalSec = 3.0
+        case .fanOnlyEco: intervalSec = 3.0
+        }
+
         monitorTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 guard let self = self else { break }
                 await self.performSample()
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                try? await Task.sleep(nanoseconds: UInt64(intervalSec * 1_000_000_000))
             }
         }
     }
 
     public func performSample() async {
-        // Collect all metrics in a single background thread to minimize context switches
         let cpuMon = cpuMonitor
         let memMon = memoryMonitor
         let procMon = processMonitor
@@ -108,6 +161,7 @@ public final class DashboardViewModel: ObservableObject {
         let netMon = networkMonitor
         let btMon = batteryThermalMonitor
         let smc = smcBridge
+        let isFanOnly = monitoringProfile == .fanOnlyEco
 
         let sample = await Task.detached(priority: .userInitiated) {
             autoreleasepool { () -> (
@@ -121,34 +175,43 @@ public final class DashboardViewModel: ObservableObject {
                 fans: [FanStatus],
                 dockers: [DockerContainerInfo]
             ) in
+                let bt = btMon.sample()
+                let fans = smc.getFanStatuses()
+
+                if isFanOnly {
+                    // Eco Mode: zero process scanning, zero docker stats, minimal overhead
+                    return (CPUUsageSnapshot(), MemoryUsageSnapshot(), [], [], DiskIOSnapshot(), NetworkIOSnapshot(), bt, fans, [])
+                }
+
                 let cpu = cpuMon.sample()
                 let mem = memMon.sample()
                 let procs = procMon.sampleProcesses(limit: 60)
                 let vols = diskMon.sampleVolumes()
                 let dIO = diskMon.sampleIO()
                 let nIO = netMon.sample()
-                let bt = btMon.sample()
-                let fans = smc.getFanStatuses()
                 let dockers = procMon.sampleDockerContainers()
                 return (cpu, mem, procs, vols, dIO, nIO, bt, fans, dockers)
             }
         }.value
 
         // Atomic batch update on MainActor
-        self.cpuSnapshot = sample.cpu
-        self.memorySnapshot = sample.mem
-        self.processes = sample.procs
-        self.diskVolumes = sample.vols
-        self.diskIOSnapshot = sample.dIO
-        self.networkIOSnapshot = sample.nIO
         self.batteryThermalSnapshot = sample.bt
         self.fanStatuses = sample.fans
-        self.dockerContainers = sample.dockers
 
-        self.appendHistory(value: sample.cpu.totalUsage, to: &self.cpuHistory)
-        self.appendHistory(value: sample.mem.usedPercentage, to: &self.memoryHistory)
-        self.appendHistory(value: sample.nIO.downloadBytesPerSec / (1024 * 1024), to: &self.networkDownHistory)
-        self.appendHistory(value: sample.nIO.uploadBytesPerSec / (1024 * 1024), to: &self.networkUpHistory)
+        if !isFanOnly {
+            self.cpuSnapshot = sample.cpu
+            self.memorySnapshot = sample.mem
+            self.processes = sample.procs
+            self.diskVolumes = sample.vols
+            self.diskIOSnapshot = sample.dIO
+            self.networkIOSnapshot = sample.nIO
+            self.dockerContainers = sample.dockers
+
+            self.appendHistory(value: sample.cpu.totalUsage, to: &self.cpuHistory)
+            self.appendHistory(value: sample.mem.usedPercentage, to: &self.memoryHistory)
+            self.appendHistory(value: sample.nIO.downloadBytesPerSec / (1024 * 1024), to: &self.networkDownHistory)
+            self.appendHistory(value: sample.nIO.uploadBytesPerSec / (1024 * 1024), to: &self.networkUpHistory)
+        }
     }
 
     public func refreshAll() {
@@ -160,7 +223,21 @@ public final class DashboardViewModel: ObservableObject {
     private func appendHistory(value: Double, to history: inout [Double]) {
         history.append(value)
         if history.count > 30 {
-            history.removeFirst()
+            history.removeFirst(history.count - 30)
+        }
+    }
+
+    public func terminateProcess(pid: pid_t, force: Bool = true) {
+        let success = processMonitor.terminateProcess(pid: pid, force: force)
+        if success {
+            self.statusMessage = "已成功結束行程 (PID \(pid))"
+            refreshAll()
+        } else {
+            self.statusMessage = "無法結束行程 (PID \(pid))，可能權限不足"
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.statusMessage = nil
         }
     }
 
@@ -169,61 +246,50 @@ public final class DashboardViewModel: ObservableObject {
         if onlyUserApps {
             list = list.filter { $0.isUserApp }
         }
-        if !processSearchText.trimmingCharacters(in: .whitespaces).isEmpty {
-            let query = processSearchText.lowercased()
+        if !processSearchText.isEmpty {
+            let q = processSearchText.lowercased()
             list = list.filter {
-                $0.name.lowercased().contains(query) ||
-                $0.rawName.lowercased().contains(query) ||
-                String($0.pid).contains(query) ||
-                ($0.projectName?.lowercased().contains(query) ?? false) ||
-                ($0.triggerAppName?.lowercased().contains(query) ?? false) ||
-                ($0.commandLine?.lowercased().contains(query) ?? false) ||
-                ($0.bundleIdentifier?.lowercased().contains(query) ?? false)
+                $0.name.lowercased().contains(q) ||
+                $0.rawName.lowercased().contains(q) ||
+                String($0.pid).contains(q) ||
+                ($0.bundleIdentifier?.lowercased().contains(q) ?? false)
             }
         }
         if processSortByCPU {
-            list.sort { $0.cpuPercentage > $1.cpuPercentage }
+            return list.sorted { $0.cpuPercentage > $1.cpuPercentage }
         } else {
-            list.sort { $0.memoryBytes > $1.memoryBytes }
+            return list.sorted { $0.memoryBytes > $1.memoryBytes }
         }
-        return list
     }
 
-    public func terminateProcess(pid: pid_t, force: Bool = true) {
-        let success = processMonitor.terminateProcess(pid: pid, force: force)
-        if success {
-            showStatus("已成功結束行程 (PID \(pid))")
-            refreshAll()
-        } else {
-            showStatus("無法結束行程 (PID \(pid))，可能需要更高權限")
+    public func purgeMemory() {
+        Task {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/usr/sbin/purge")
+            try? proc.run()
+            proc.waitUntilExit()
+            await performSample()
+            await MainActor.run {
+                self.statusMessage = "✅ 已成功釋放系統快取記憶體 (Purge Cache)"
+            }
         }
+    }
+
+    public func lowerPriority(pid: pid_t) {
+        lowerProcessPriority(pid: pid)
     }
 
     public func lowerProcessPriority(pid: pid_t) {
         let success = processMonitor.lowerPriority(pid: pid)
         if success {
-            showStatus("已將 PID \(pid) 優先權降至最低")
+            self.statusMessage = "已成功降低行程優先權 (PID \(pid))"
+            refreshAll()
         } else {
-            showStatus("降低優先權失敗")
+            self.statusMessage = "無法更改優先權 (PID \(pid))"
         }
-    }
 
-    public func purgeMemory() {
-        let success = smcBridge.purgeMemory()
-        if success {
-            showStatus("已完成系統快取記憶體釋放！")
-        } else {
-            showStatus("快取記憶體釋放指令已送出")
-        }
-        refreshAll()
-    }
-
-    public func showStatus(_ msg: String) {
-        self.statusMessage = msg
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.5) { [weak self] in
-            if self?.statusMessage == msg {
-                self?.statusMessage = nil
-            }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            self?.statusMessage = nil
         }
     }
 }

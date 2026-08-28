@@ -141,6 +141,36 @@ public struct MainWindowView: View {
 
                     Spacer()
 
+                    // Monitoring Profile Switcher (Eco / Real-time)
+                    Menu {
+                        ForEach(MonitoringProfile.allCases) { profile in
+                            Button {
+                                dashboardVM.monitoringProfile = profile
+                            } label: {
+                                HStack {
+                                    Image(systemName: profile.iconName)
+                                    Text(profile.title)
+                                    if dashboardVM.monitoringProfile == profile {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: dashboardVM.monitoringProfile.iconName)
+                                .foregroundColor(dashboardVM.monitoringProfile == .fanOnlyEco ? .green : .accentColor)
+                            Text(dashboardVM.monitoringProfile.shortTitle)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 5)
+                        .background(Color(nsColor: .controlBackgroundColor))
+                        .cornerRadius(6)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .help("監控模式切換：\(dashboardVM.monitoringProfile.description)")
+
                     Button {
                         Task {
                             await dashboardVM.performSample()
