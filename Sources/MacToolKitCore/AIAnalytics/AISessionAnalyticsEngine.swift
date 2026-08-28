@@ -73,31 +73,43 @@ public final class AISessionAnalyticsEngine: @unchecked Sendable {
                     liveStatus = matched.cpuPercentage > 15.0 ? .executingTool : (matched.cpuPercentage > 1.0 ? .thinking : .idle)
                 }
             } else if session.toolType == .antigravity {
+                // Antigravity language_server runs from `/`, so we cannot rely on CWD.
+                // We match if the session is very recent (active in last 5 mins) OR if we find an active antigravity process
+                let isRecent = Date().timeIntervalSince(session.lastActiveAt) < 300
                 if let matched = liveProcesses.first(where: { p in
                     guard !matchedPIDs.contains(p.pid) else { return false }
-                    guard p.rawName.lowercased().contains("antigravity") || p.aiContext?.toolName == "Antigravity Agent" else { return false }
-                    guard let pCwd = p.workingDirectory, !pCwd.isEmpty, pCwd != "/", pCwd != NSHomeDirectory() else { return false }
-                    return pCwd.contains(session.sessionId) || pCwd == session.projectPath
+                    let cmd = (p.commandLine ?? "").lowercased()
+                    let name = p.rawName.lowercased()
+                    return name.contains("antigravity") || cmd.contains("antigravity") || cmd.contains("language_server")
                 }) {
-                    matchedPIDs.insert(matched.pid)
-                    livePID = matched.pid
-                    liveCPU = matched.cpuPercentage
-                    liveRAM = matched.memoryBytes
-                    liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
+                    if isRecent {
+                        matchedPIDs.insert(matched.pid)
+                        livePID = matched.pid
+                        liveCPU = matched.cpuPercentage
+                        liveRAM = matched.memoryBytes
+                        liveStatus = matched.cpuPercentage > 1.0 ? .thinking : .idle
+                    }
+                } else if isRecent {
+                    // Fallback: If modified in last 5 mins, consider it active even if process matching failed
+                    liveStatus = .idle
                 }
             } else if session.toolType == .codex {
-                // Only match if session was modified within the last 15 minutes
-                if Date().timeIntervalSince(session.lastActiveAt) < 900 {
+                // Codex app-server runs globally
+                let isRecent = Date().timeIntervalSince(session.lastActiveAt) < 300
+                if isRecent {
                     if let matched = liveProcesses.first(where: { p in
                         guard !matchedPIDs.contains(p.pid) else { return false }
-                        guard p.rawName.lowercased().contains("codex") || (p.commandLine?.contains("codex") ?? false) else { return false }
-                        return true
+                        let cmd = (p.commandLine ?? "").lowercased()
+                        let name = p.rawName.lowercased()
+                        return name.contains("codex") || cmd.contains("codex")
                     }) {
                         matchedPIDs.insert(matched.pid)
                         livePID = matched.pid
                         liveCPU = matched.cpuPercentage
                         liveRAM = matched.memoryBytes
-                        liveStatus = matched.cpuPercentage > 5.0 ? .active : .idle
+                        liveStatus = matched.cpuPercentage > 1.0 ? .thinking : .idle
+                    } else {
+                        liveStatus = .idle
                     }
                 }
             }
