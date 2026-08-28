@@ -176,7 +176,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         let args = details.args
         let cmdSummary = args.isEmpty ? (execPath.isEmpty ? nil : execPath) : args.joined(separator: " ")
 
-        let cwdInfo = getCWD(pid: pid)
+        let cwdInfo = getCWD(pid: pid, isGuiApp: isGuiApp)
         let triggerInfo = resolveTriggerApp(pid: pid)
 
         var friendly = rawName
@@ -187,7 +187,8 @@ public final class ProcessMonitor: @unchecked Sendable {
         let lowerRaw = rawName.lowercased()
         let lowerPath = execPath.lowercased()
         let fullCmd = (cmdSummary ?? "").lowercased()
-        let projSuffix = cwdInfo.project != nil ? " [\(cwdInfo.project!)]" : ""
+        var projName = cwdInfo.project
+        var projSuffix = projName != nil ? " [\(projName!)]" : ""
         let triggerPrefix = triggerInfo.app != nil ? "由 \(triggerInfo.app!) 執行的 " : ""
 
         // 1. Docker
@@ -196,10 +197,12 @@ public final class ProcessMonitor: @unchecked Sendable {
             category = .container
             impact = "⚠️ 結束將會中止所有正在運行的 Docker 容器與虛擬環境"
             parentApp = "Docker"
+            projName = nil
+            projSuffix = ""
         }
         // 2. Claude Code
         else if lowerRaw.contains("claude") || lowerPath.contains("claude") || lowerPath.contains(".local/share/claude") {
-            let pName = cwdInfo.project != nil ? " (\(cwdInfo.project!))" : ""
+            let pName = projName != nil ? " (\(projName!))" : ""
             friendly = "Claude Code\(pName)"
             category = .developer
             impact = "中止目前正在進行的 Claude Code 終端任務\(projSuffix)"
@@ -304,7 +307,7 @@ public final class ProcessMonitor: @unchecked Sendable {
             category: category,
             commandLine: cmdSummary,
             workingDirectory: cwdInfo.cwd,
-            projectName: cwdInfo.project,
+            projectName: projName,
             triggerAppName: triggerInfo.app,
             triggerChain: triggerInfo.chain,
             startedAt: details.startedAt,
@@ -469,7 +472,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         return (execPath, args, startedAt, uptime)
     }
 
-    private func getCWD(pid: pid_t) -> (cwd: String?, project: String?) {
+    private func getCWD(pid: pid_t, isGuiApp: Bool) -> (cwd: String?, project: String?) {
         var vnodeInfo = proc_vnodepathinfo()
         let vnodeSize = Int32(MemoryLayout<proc_vnodepathinfo>.stride)
         if proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &vnodeInfo, vnodeSize) == vnodeSize {
@@ -483,14 +486,32 @@ public final class ProcessMonitor: @unchecked Sendable {
                 }
             }
             if let cwd = cwdStr {
-                var proj = URL(fileURLWithPath: cwd).lastPathComponent
+                let homeDir = NSHomeDirectory()
+                let currentUserName = NSUserName()
+                let genericNames: Set<String> = [
+                    "data", "containers", "library", "application support", "caches",
+                    "preferences", "frameworks", "saved application state", "system",
+                    "volumes", "users", "private", "var", "tmp", "applications",
+                    currentUserName.lowercased(), "root"
+                ]
+
+                // If CWD is user home, generic system directory, or a top-level GUI app, do not treat as a project workspace
+                if cwd == homeDir || cwd == "/Users/\(currentUserName)" || isGuiApp {
+                    return (cwd, nil)
+                }
+
+                var proj: String? = URL(fileURLWithPath: cwd).lastPathComponent
+                if let p = proj, genericNames.contains(p.lowercased()) {
+                    proj = nil
+                }
+
                 // If it is a worktree folder (e.g. wf_fbda0cb8-24c-1), resolve the meaningful context
-                if proj.hasPrefix("wf_") || proj.hasPrefix("tmp") || proj.hasPrefix("scratch") {
+                if let p = proj, (p.hasPrefix("wf_") || p.hasPrefix("tmp") || p.hasPrefix("scratch")) {
                     let parent = URL(fileURLWithPath: cwd).deletingLastPathComponent().lastPathComponent
-                    if !parent.isEmpty && parent != "/" && !parent.hasPrefix("wf_") && parent != "var" && parent != "folders" && parent != "T" {
-                        proj = "\(parent) [工作區 \(proj.prefix(12))]"
+                    if !parent.isEmpty && !genericNames.contains(parent.lowercased()) && !parent.hasPrefix("wf_") {
+                        proj = "\(parent) [工作區 \(p.prefix(10))]"
                     } else {
-                        proj = "工作區 \(proj.prefix(12))"
+                        proj = "工作區 \(p.prefix(10))"
                     }
                 }
                 return (cwd, proj)
