@@ -125,8 +125,8 @@ public struct AIAnalyticsView: View {
                                                     .font(.system(size: 11))
                                                     .foregroundColor(.secondary)
                                             }
-                                            Text("• 已運作 \(session.formattedDuration)")
-                                                .font(.system(size: 11))
+                                            Text("• 歷時 \(session.formattedDuration)")
+                                                .font(.system(size: 10))
                                                 .foregroundColor(.secondary)
                                         }
                                     }

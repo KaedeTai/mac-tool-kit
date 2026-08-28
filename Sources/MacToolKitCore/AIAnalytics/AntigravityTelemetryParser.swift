@@ -29,6 +29,24 @@ public final class AntigravityTelemetryParser: Sendable {
         return Array(sessions.prefix(limit))
     }
 
+    private func getActiveModelName() -> String {
+        let stateUrl = URL(fileURLWithPath: NSHomeDirectory() + "/.gemini/antigravity/antigravity_state.pbtxt")
+        guard let content = try? String(contentsOf: stateUrl, encoding: .utf8) else {
+            return "Gemini (Unknown)"
+        }
+        for line in content.components(separatedBy: .newlines) {
+            if line.contains("last_selected_agent_model:") {
+                if line.contains("M132") { return "Gemini 3.7 Flash High" }
+                if line.contains("M16") { return "Gemini 3.1 Pro High" }
+                if line.contains("M131") { return "Gemini 3.7 Flash" }
+                if line.contains("M15") { return "Gemini 3.1 Pro" }
+                if line.contains("M11") { return "Gemini 2.5 Pro" }
+                return "Gemini (Custom)"
+            }
+        }
+        return "Gemini (Default)"
+    }
+
     public func parseTranscriptFile(url: URL, conversationId: String) -> AISessionRecord? {
         guard let data = try? Data(contentsOf: url),
               let content = String(data: data, encoding: .utf8) else {
@@ -38,7 +56,7 @@ public final class AntigravityTelemetryParser: Sendable {
         let lines = content.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard !lines.isEmpty else { return nil }
 
-        let modelName = "Gemini 3.7 Flash High"
+        let modelName = getActiveModelName()
         var startedAt: Date = Date()
         var lastActiveAt: Date = Date.distantPast
         let projectName = "mac-tool-kit"
