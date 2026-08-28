@@ -1,0 +1,32 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+
+# Swift Package Manager & Xcode
+.build/
+.swiftpm/
+Packages/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+
+# Custom Build & Cache directories
+.tmp/
+.clang-cache/
+.module-cache/
+
+# Binaries & Packaging outputs
+MacDashboard.app
+dist/
+*.dmg
+*.zip
+*.pkg
+
+# IDE & Editor caches
+.vscode/
+.idea/
+.gemini/
