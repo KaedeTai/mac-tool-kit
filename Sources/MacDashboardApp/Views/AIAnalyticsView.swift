@@ -593,8 +593,12 @@ struct SessionDetailInspectorView: View {
                 if !session.turns.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack {
-                            Text("📊 各對話輪次 (Turns) Token 消耗趨勢與尖峰分佈")
+                            Text("📊 各對話輪次 Token 消耗 (動態範圍比例)")
                                 .font(.system(size: 12, weight: .bold))
+                                .foregroundColor(.secondary)
+                            Spacer()
+                            Text("藍:執行/工具 • 紫:思考規劃 • 紅:異常暴增")
+                                .font(.system(size: 10, weight: .medium))
                                 .foregroundColor(.secondary)
                             Spacer()
                             Text("共 \(session.turns.count) 個對話輪次")
@@ -602,27 +606,32 @@ struct SessionDetailInspectorView: View {
                                 .foregroundColor(.secondary)
                         }
 
-                        let maxTurnTokens = Double(session.turns.map { $0.inputTokens + $0.outputTokens + $0.cacheReadTokens }.max() ?? 1)
-                        HStack(alignment: .bottom, spacing: 3) {
-                            ForEach(Array(session.turns.prefix(30).enumerated()), id: \.offset) { idx, turn in
-                                let tTotal = Double(turn.inputTokens + turn.outputTokens + turn.cacheReadTokens)
-                                let ratio = max(0.08, min(1.0, tTotal / max(1.0, maxTurnTokens)))
-                                let isSpike = ratio > 0.65
+                        // Use a non-linear scale (square root) for better visualization of variance
+                        let turnTokens = session.turns.map { Double($0.inputTokens + $0.outputTokens + $0.cacheReadTokens) }
+                        let maxTurnTokens = max(1.0, turnTokens.max() ?? 1)
+                        
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(alignment: .bottom, spacing: 4) {
+                                ForEach(Array(session.turns.enumerated()), id: \.offset) { idx, turn in
+                                    let tTotal = Double(turn.inputTokens + turn.outputTokens + turn.cacheReadTokens)
+                                    // Square root scaling to make smaller bars visible while keeping spikes distinct
+                                    let ratio = sqrt(tTotal) / sqrt(maxTurnTokens)
+                                    let isSpike = ratio > 0.85
 
-                                VStack(spacing: 2) {
-                                    RoundedRectangle(cornerRadius: 2)
-                                        .fill(isSpike ? Color.red : (turn.taskCategory == .planning ? Color.purple : Color.blue))
-                                        .frame(height: max(4, CGFloat(ratio * 36)))
+                                    VStack(spacing: 2) {
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(isSpike ? Color.red : (turn.taskCategory == .planning ? Color.purple : Color.blue))
+                                            .frame(width: 14, height: max(4, CGFloat(ratio * 40)))
 
-                                    Text("#\(turn.turnIndex)")
-                                        .font(.system(size: 8, design: .monospaced))
-                                        .foregroundColor(.secondary)
+                                        Text("#\(turn.turnIndex)")
+                                            .font(.system(size: 8, design: .monospaced))
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .help("輪次 #\(turn.turnIndex)\n時間: \(timeFormatter.string(from: turn.timestamp))\n消耗: \(viewModel.formatTokens(Int64(tTotal))) Tokens\n任務: \(turn.taskDescription)")
                                 }
-                                .help("Turn #\(turn.turnIndex) (\(timeFormatter.string(from: turn.timestamp))): \(viewModel.formatTokens(Int64(tTotal))) Tokens - \(turn.taskDescription)")
                             }
+                            .padding(8)
                         }
-                        .frame(height: 52)
-                        .padding(8)
                         .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
                         .cornerRadius(6)
                     }
@@ -690,9 +699,16 @@ struct SessionDetailInspectorView: View {
 
                 // 4. Token Granular Structure
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("🪙 該 Session 獨立 Token 結構明細")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.secondary)
+                    HStack {
+                        Text("🪙 該 Session 獨立 Token 結構明細")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Image(systemName: "info.circle")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                            .help("LLM API 計費方式為『每輪累加的 Context Window』。即：同一對話中，之前對話的歷史也會被送出並再次計費。這是為何 Token 數與開銷可能會非常驚人的真實原因。")
+                    }
 
                     HStack(spacing: 8) {
                         TokenBadge(label: "輸入 (Input)", value: viewModel.formatTokens(session.tokenUsage.inputTokens), color: .blue)
