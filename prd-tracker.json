@@ -4,15 +4,15 @@
   "project": "mac-tool-kit",
   "mode": "local-only",
   "source_of_truth": "repo-json",
-  "updated_at": "2026-08-29T22:10:00+08:00",
+  "updated_at": "2026-08-29T22:17:00+08:00",
   "acceptance_policy": {
     "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
     "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
     "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
   },
   "summary": {
-    "overall_status": "implementation-complete-verification-blocked",
-    "verdict": "automated-and-native-ui-pass-coverage-blocked",
+    "overall_status": "release-live-verification-policy-blocked",
+    "verdict": "github-release-live-coverage-blocked",
     "prd_items": 5,
     "verified": 0,
     "partial": 5,
@@ -180,7 +180,7 @@
       "tasks": [
         { "id": "TASK-AUDIT-001", "title": "Trace all displayed values to source", "status": "done" },
         { "id": "TASK-AUDIT-002", "title": "Implement corrections", "status": "done" },
-        { "id": "TASK-RELEASE-130", "title": "Publish v1.3.0 with current Retina screenshots, README and evidence-based release notes", "status": "doing" }
+        { "id": "TASK-RELEASE-130", "title": "Publish v1.3.0 with current Retina screenshots, README and evidence-based release notes", "status": "done" }
       ],
       "gaps": [
         "Process termination and manual fan writes were not executed against unrelated live workloads.",
@@ -361,8 +361,8 @@
       "title": "MacDashboard v1.3.0 public release",
       "status": "partial",
       "priority": "P0",
-      "summary": "The v1.3.0 README, eight Retina screenshots, evidence-based release notes, versioned app bundle, DMG, ZIP and checksums are prepared and locally verified. GitHub publication is still in progress; repository coverage remains below policy.",
-      "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots"],
+      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. All three public assets were downloaded again and verified; repository coverage remains below policy.",
+      "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots", "https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0"],
       "acceptance_criteria": [
         "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
         "The app bundle, DMG, ZIP, tag and release notes use version 1.3.0.",
@@ -396,16 +396,15 @@
           "expected": "Both archives contain a version 1.3.0 app that passes strict signature verification and matches published checksums.",
           "automated_status": "passed",
           "manual_status": "passed",
-          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.0 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.0.md."]
+          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.0 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.0.md.", "GitHub reports v1.3.0 as a public non-draft, non-prerelease release with three uploaded assets. All three were downloaded from unauthenticated public URLs; the downloaded DMG and ZIP passed the published SHA-256 checksums."]
         }
       ],
       "tasks": [
         { "id": "TASK-RELEASE-README", "title": "Replace stale README claims and add all current screenshots", "status": "done" },
         { "id": "TASK-RELEASE-PACKAGE", "title": "Build and verify versioned DMG, ZIP and checksums", "status": "done" },
-        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "doing" }
+        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "done" }
       ],
       "gaps": [
-        "GitHub publication and public download verification are pending.",
         "Combined source line coverage is 71.04 percent, below the repository 95 percent release target.",
         "The release artifacts are ad-hoc signed and not Apple-notarized."
       ]

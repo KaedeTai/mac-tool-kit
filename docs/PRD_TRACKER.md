@@ -35,4 +35,4 @@
 - 「選擇並釋放空間」預設不勾任何項目，只允許固定白名單的可重建快取、日誌與垃圾桶；每項顯示路徑、影響和後果，並有第二次永久清除確認。真實使用者檔案未執行刪除；刪除與重新量測以 temporary fixture 驗證。Docker Images／Containers／Volumes／Build Cache 由 `docker system df` 分開回報；Dashboard 不提供可能刪資料庫的 volume prune。
 - 行程管理員在 1000-point 最小寬度改為 compact columns：保留名稱／來源、CPU、RAM 與動作，類別、PID、已運作時間改到列明細。八個 tab 的最小視窗截圖已逐頁讀取，未再看到垂直文字、控制列重疊或主要操作被截斷。
 - 風扇寫入與結束行程不為了測試而執行，維持 manual not-covered；purge 不再列為可驗證的 RAM 動作。
-- v1.3.0 DMG 與 ZIP 已完成本機封裝驗證：兩者內含的 App 都回報 1.3.0 並通過嚴格 codesign 驗證；README、八張高解析度截圖、Release Note 與 SHA-256 已就緒，GitHub 公開下載驗證列為發布階段最後一步。
+- GitHub Release [`v1.3.0`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0) 已公開且不是 draft／prerelease。DMG、ZIP 與 SHA256SUMS 共三個附件都已從公開網址重新下載；兩個發行包通過公布的 SHA-256。來源 tag 指向 `4778d2fe097fc5a1cc502a3476c303a9909ceef0`。

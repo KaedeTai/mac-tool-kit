@@ -1,10 +1,11 @@
 # Session Handoff — MacDashboard v1.3.0 release
 
-Updated: 2026-08-29 22:10 Asia/Taipei
+Updated: 2026-08-29 22:17 Asia/Taipei
 
 ## Current state
 
-- `VERSION`, the app bundle, DMG and ZIP are aligned at `1.3.0`.
+- GitHub Release [`v1.3.0`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0) is public, non-draft and non-prerelease. Tag `v1.3.0` resolves to source commit `4778d2fe097fc5a1cc502a3476c303a9909ceef0`.
+- `VERSION`, the app bundle, DMG, ZIP, tag and Release Note are aligned at `1.3.0`.
 - README has been rewritten around explicit data provenance and now embeds all eight current Dashboard tabs.
 - The eight public screenshots under `assets/screenshots/` are direct 1440 × 1050 PNG captures. Every file was opened at original detail and inspected for clipping, overlap and readability.
 - The public AI screenshot is scoped to the current `mac-tool-kit` Active Codex session. The API-estimate toggle is off, and both the tree and selected-session evidence panel omit the estimate.
@@ -23,6 +24,8 @@ Updated: 2026-08-29 22:10 Asia/Taipei
 - DMG SHA-256: `edb15ff7579e99ec1706e335bd1ae128770a661333b5655f56622ad50dab8c95`.
 - ZIP SHA-256: `eabd6afa9273ece25108b220d19430e9aa4546d6686c58328b20f7c6fca9948f`.
 - README screenshot dimensions: eight of eight are 1440 × 1050 PNG.
+- GitHub reports all three assets as uploaded. The DMG, ZIP and `SHA256SUMS.txt` were downloaded again from their public release URLs; both archive checksums passed.
+- Local `main`, `origin/main` and the release tag all resolved to `4778d2fe097fc5a1cc502a3476c303a9909ceef0` at the release cutover. This handoff update is the only post-release documentation follow-up.
 
 ## Source map
 
@@ -36,13 +39,12 @@ Updated: 2026-08-29 22:10 Asia/Taipei
 - Release artifacts: `dist/MacDashboard-v1.3.0-macOS.dmg`, `dist/MacDashboard-v1.3.0-macOS.zip`, `dist/SHA256SUMS.txt`
 - Acceptance state: `prd-tracker.json`, `docs/PRD_TRACKER.md`, `docs/design-site/index.html`
 
-## Exact next steps
+## Follow-up priorities
 
-1. Run repository hygiene, README-link, screenshot-dimension and package checksum checks.
-2. Review the complete diff, then commit and push `main`.
-3. Tag `v1.3.0`, create the GitHub Release with DMG, ZIP and `SHA256SUMS.txt`, and wait until the release is public.
-4. Download all three public assets to a new temporary directory and verify the published checksums.
-5. Update this handoff and `prd-tracker.json` with the final commit, tag, release URL and public-download evidence.
+1. Raise combined source coverage from 71.04% to the repository's 95% policy before changing the overall verdict to safe.
+2. Add an automated screenshot/layout baseline for all eight tabs.
+3. If fully automated installation is required, sign with a Developer ID certificate and notarize the DMG/ZIP workflow.
+4. Keep destructive acceptance isolated: use a user-approved disposable cache fixture, never unrelated live data or Docker volumes.
 
 ## Risks and deliberate gaps
 
