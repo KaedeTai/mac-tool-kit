@@ -36,13 +36,9 @@ struct MacDashboardApp: App {
 
             Text("CPU 總負載: \(String(format: "%.1f%%", dashboardVM.cpuSnapshot.totalUsage))")
             Text("RAM 佔用: \(String(format: "%.1f%%", dashboardVM.memorySnapshot.usedPercentage))")
-            Text("風扇轉速: \(dashboardVM.fanStatuses.first?.currentRPM ?? 1800) RPM")
+            Text(dashboardVM.fanStatuses.first.map { "風扇實際轉速: \($0.currentRPM) RPM" } ?? "風扇實際轉速: 不可取得")
 
             Divider()
-
-            Button("一鍵釋放記憶體快取 (Purge)") {
-                dashboardVM.purgeMemory()
-            }
 
             Button("全速冷卻散熱 (Max Turbo)") {
                 fanVM.selectMode(.maxCooling)

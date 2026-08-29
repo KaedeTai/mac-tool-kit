@@ -1,0 +1,47 @@
+{
+  "test_cases_path": "docs/qa/test-cases.md",
+  "test_id_prefixes": {
+    "TC-OVERVIEW": "系統總覽",
+    "TC-AI": "AI 寫程式分析",
+    "TC-CODEX": "Codex 來源",
+    "TC-HIERARCHY": "Session 階層",
+    "TC-HISTORY": "Session 歷史",
+    "TC-LAG": "Lag 診斷中心",
+    "TC-CPU": "CPU 運算",
+    "TC-MEMORY": "記憶體 RAM",
+    "TC-DISK-NETWORK": "磁碟與網路",
+    "TC-STORAGE": "容量分析與清理",
+    "TC-THERMAL-FAN": "風扇與散熱",
+    "TC-PROCESS": "行程管理員",
+    "TC-RESPONSIVE-UI": "跨頁響應式 UI",
+    "TC-TEST-SUITE": "完整 Swift 測試",
+    "TC-VISUAL": "八頁視覺驗收",
+    "REL": "發行與下載包"
+  },
+  "tier1_smoke_cases": [
+    "TC-OVERVIEW-001",
+    "TC-AI-001",
+    "TC-LAG-001",
+    "TC-CPU-001",
+    "TC-MEMORY-001",
+    "TC-DISK-NETWORK-001",
+    "TC-THERMAL-FAN-001",
+    "TC-PROCESS-001",
+    "TC-TEST-SUITE-001",
+    "TC-VISUAL-001"
+  ],
+  "critical_infra_paths": [
+    "^Package\\.swift$",
+    "^Sources/MacToolKitCore/",
+    "^Sources/MacToolKitHardwareABI/",
+    "^Sources/MacDashboardApp/App/",
+    "^Sources/MacDashboardApp/ViewModels/",
+    "^scripts/",
+    "^schemas/"
+  ],
+  "import_graph_max_depth": 3,
+  "always_run_on_any_change": [
+    "TC-TEST-SUITE-001",
+    "TC-VISUAL-001"
+  ]
+}

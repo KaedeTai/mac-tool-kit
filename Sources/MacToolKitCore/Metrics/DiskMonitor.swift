@@ -51,11 +51,11 @@ public final class DiskMonitor: @unchecked Sendable {
                 }
             }
 
-            // Always ensure Root `/` (Macintosh HD) is present
+            // Always ensure the root volume is present.
             if !seenPaths.contains("/") {
                 let rootURL = URL(fileURLWithPath: "/")
                 if let values = try? rootURL.resourceValues(forKeys: Set(keys)) {
-                    let name = values.volumeName ?? "Macintosh HD"
+                    let name = values.volumeName ?? "系統磁碟 (/)"
                     let total = UInt64(values.volumeTotalCapacity ?? 0)
                     let free = UInt64(values.volumeAvailableCapacity ?? 0)
                     if total > 0 {

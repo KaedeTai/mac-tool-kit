@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mac Tool Kit — 可信任 Dashboard 驗收與資料規格</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0d0c;
+      --surface: #111412;
+      --surface-2: #171b18;
+      --line: #29302b;
+      --line-strong: #3d4740;
+      --text: #f1f5f1;
+      --muted: #9ca89f;
+      --green: #61e58a;
+      --amber: #ffbd5d;
+      --red: #ff6b65;
+      --blue: #68a6ff;
+      --purple: #ca82ff;
+      --sidebar: 248px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang TC", sans-serif;
+      line-height: 1.55;
+    }
+    a { color: inherit; }
+    button, input { font: inherit; }
+    .sidebar {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: var(--sidebar);
+      padding: 28px 22px;
+      border-right: 1px solid var(--line);
+      background: rgba(11, 13, 12, .94);
+      backdrop-filter: blur(18px);
+      z-index: 10;
+    }
+    .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 34px; }
+    .brand-mark {
+      width: 34px; height: 34px; display: grid; place-items: center;
+      border: 1px solid #347d4a; color: var(--green); border-radius: 10px;
+      background: #102116; font-weight: 800;
+    }
+    .brand strong { display: block; font-size: 14px; }
+    .brand small { color: var(--muted); font-size: 11px; }
+    nav { display: grid; gap: 5px; }
+    nav a {
+      text-decoration: none; color: var(--muted); padding: 9px 11px;
+      border-left: 2px solid transparent; font-size: 13px; transition: .2s ease;
+    }
+    nav a:hover, nav a.active { color: var(--text); border-left-color: var(--green); background: #111713; }
+    .sidebar-note {
+      position: absolute; left: 22px; right: 22px; bottom: 24px;
+      border-top: 1px solid var(--line); padding-top: 16px; color: var(--muted); font-size: 11px;
+    }
+    main { margin-left: var(--sidebar); }
+    section { max-width: 1180px; margin: 0 auto; padding: 88px 64px; border-bottom: 1px solid var(--line); }
+    .hero { min-height: 92vh; display: grid; align-content: center; position: relative; overflow: hidden; }
+    .hero::after {
+      content: ""; position: absolute; right: -120px; top: 10%; width: 460px; height: 460px;
+      border: 1px solid #1f3e28; border-radius: 50%; box-shadow: 0 0 120px rgba(97,229,138,.08);
+      pointer-events: none;
+    }
+    .eyebrow { color: var(--green); text-transform: uppercase; letter-spacing: .14em; font: 700 12px/1 monospace; }
+    h1 { max-width: 850px; margin: 18px 0 20px; font-size: clamp(42px, 6vw, 78px); line-height: .98; letter-spacing: -.045em; }
+    h2 { margin: 0 0 16px; font-size: clamp(28px, 3vw, 40px); letter-spacing: -.035em; }
+    h3 { margin: 0 0 8px; font-size: 18px; }
+    p { color: #c9d1ca; }
+    .lede { max-width: 760px; font-size: 18px; }
+    .verdict-line { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 42px; padding-top: 24px; border-top: 1px solid var(--line); }
+    .verdict-line div { min-width: 180px; }
+    .verdict-line span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .verdict-line strong { font-size: 24px; }
+    .bad { color: var(--red) !important; }
+    .warn { color: var(--amber) !important; }
+    .good { color: var(--green) !important; }
+    .info { color: var(--blue) !important; }
+    .section-head { display: grid; grid-template-columns: 1fr minmax(280px, 430px); gap: 36px; align-items: end; margin-bottom: 42px; }
+    .section-head p { margin: 0; }
+    .legend { display: flex; gap: 8px; flex-wrap: wrap; margin: 24px 0; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line-strong);
+      border-radius: 999px; padding: 4px 9px; color: #d7ded8; background: #131714; font: 600 11px/1.25 monospace;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .audit { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .audit th { color: var(--muted); font-weight: 600; text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--line-strong); }
+    .audit td { vertical-align: top; padding: 18px 10px; border-bottom: 1px solid var(--line); }
+    .audit td:first-child { font-weight: 700; min-width: 135px; }
+    .audit td:nth-child(2) { width: 120px; }
+    .status { font: 700 11px/1 monospace; letter-spacing: .04em; }
+    .status.fail { color: var(--red); }
+    .status.partial { color: var(--amber); }
+    .status.pass { color: var(--green); }
+    .finding-list { margin: 0; padding-left: 18px; }
+    .finding-list li + li { margin-top: 5px; }
+    .comparison {
+      display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line-strong); border-radius: 16px; overflow: hidden;
+    }
+    .comparison > div { padding: 28px; min-width: 0; }
+    .comparison > div + div { border-left: 1px solid var(--line-strong); background: #0f1511; }
+    .comparison h3 { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    .comparison .big { font: 760 40px/1.1 monospace; margin: 10px 0; }
+    .comparison code { color: #d3dbd4; overflow-wrap: anywhere; }
+    .workspace {
+      margin-top: 28px; display: grid; grid-template-columns: 260px 1fr; min-height: 610px;
+      border: 1px solid var(--line-strong); border-radius: 18px; overflow: hidden; background: #0e110f;
+    }
+    .workspace aside { padding: 20px; border-right: 1px solid var(--line); background: #101310; }
+    .workspace aside h3 { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .09em; }
+    .project-link { padding: 12px 10px; margin-top: 5px; border-radius: 8px; color: #b9c3bb; font-size: 13px; }
+    .project-link.selected { color: var(--text); background: #1a241c; border-left: 2px solid var(--green); }
+    .work-area { padding: 28px 32px; }
+    .tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--line); margin-bottom: 26px; }
+    .tabs button { border: 0; background: transparent; color: var(--muted); padding: 0 0 12px; cursor: pointer; }
+    .tabs button.active { color: var(--text); border-bottom: 2px solid var(--green); }
+    .tree-row { display: grid; grid-template-columns: 1fr auto; gap: 18px; padding: 17px 0; border-bottom: 1px solid var(--line); }
+    .tree-row .title { display: flex; gap: 9px; align-items: center; font-weight: 700; }
+    .tree-row .meta { color: var(--muted); font: 12px/1.7 monospace; margin: 6px 0 0 25px; }
+    .tree-row .metrics { text-align: right; font: 12px/1.7 monospace; color: #c9d2cb; white-space: nowrap; }
+    .child { margin-left: 25px; padding-left: 24px; border-left: 1px solid #3b6947; }
+    .empty-child { margin: 10px 0 0 25px; padding: 12px 16px; color: var(--muted); border-left: 1px dashed var(--line-strong); font-size: 12px; }
+    .source { color: var(--blue); }
+    .flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: stretch; margin-top: 34px; }
+    .node { position: relative; border-top: 2px solid var(--green); padding: 18px 4px 0; }
+    .node:not(:last-child)::after { content: "→"; position: absolute; right: -15px; top: 17px; color: var(--muted); }
+    .node strong { display: block; }
+    .node span { display: block; color: var(--muted); font-size: 12px; margin-top: 7px; }
+    .rule-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); margin-top: 28px; }
+    .rule { padding: 26px; background: var(--bg); }
+    .rule .n { color: var(--green); font: 800 12px monospace; }
+    .rule p { font-size: 13px; margin-bottom: 0; }
+    .timeline { margin-top: 34px; border-top: 1px solid var(--line-strong); }
+    .state { display: grid; grid-template-columns: 150px 1fr 230px; gap: 28px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+    .state strong { font-size: 17px; }
+    .state p { margin: 0; font-size: 13px; }
+    .state .trigger { color: var(--muted); font: 12px/1.6 monospace; }
+    .architecture { display: grid; grid-template-columns: 1fr 52px 1.25fr 52px 1fr; align-items: center; margin-top: 34px; }
+    .arch-block { min-height: 230px; border: 1px solid var(--line-strong); padding: 24px; background: var(--surface); }
+    .arch-block h3 { color: var(--green); }
+    .arch-block ul { padding-left: 18px; color: #c9d1ca; font-size: 13px; }
+    .arrow { text-align: center; color: var(--muted); font-size: 24px; }
+    .phase { display: grid; grid-template-columns: 120px 1fr 180px; gap: 26px; padding: 24px 0; border-top: 1px solid var(--line); }
+    .phase strong { color: var(--green); font-family: monospace; }
+    .phase p { margin: 0; font-size: 13px; }
+    .decision { border-top: 1px solid var(--line-strong); padding: 24px 0; display: grid; grid-template-columns: 160px 1fr; gap: 28px; }
+    .decision legend { color: var(--muted); font: 700 11px/1 monospace; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 12px; }
+    .options { display: grid; gap: 10px; }
+    .options label { border: 1px solid var(--line); padding: 13px 15px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+    .options label:has(input:checked) { border-color: #438457; background: #132017; }
+    .options input { accent-color: var(--green); margin-right: 9px; }
+    .note { color: var(--muted); font-size: 12px; }
+    .reveal { opacity: 0; transform: translateY(12px); transition: opacity .45s ease, transform .45s ease; }
+    .reveal.visible { opacity: 1; transform: none; }
+    .print-only { display: none; }
+    @media (max-width: 900px) {
+      :root { --sidebar: 0px; }
+      .sidebar {
+        display: block; position: sticky; top: 0; width: 100%; height: auto;
+        padding: 10px 14px; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line);
+      }
+      .sidebar .brand, .sidebar-note { display: none; }
+      .sidebar nav { display: flex; width: max-content; gap: 4px; }
+      .sidebar nav a { padding: 8px 10px; border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; }
+      .sidebar nav a.active { border-left: 0; border-bottom-color: var(--green); }
+      main { margin-left: 0; }
+      section { padding: 64px 24px; scroll-margin-top: 54px; }
+      .section-head, .workspace, .comparison, .flow, .rule-grid, .architecture, .phase, .decision, .state { grid-template-columns: 1fr; }
+      .comparison > div + div { border-left: 0; border-top: 1px solid var(--line-strong); }
+      .workspace aside { border-right: 0; border-bottom: 1px solid var(--line); }
+      .node:not(:last-child)::after { display: none; }
+      .arrow { transform: rotate(90deg); }
+      .state { gap: 8px; }
+      .audit, .audit tbody, .audit tr, .audit td { display: block; width: 100%; }
+      .audit thead { display: none; }
+      .audit tr { padding: 18px 0; border-bottom: 1px solid var(--line-strong); }
+      .audit td { padding: 6px 0; border: 0; }
+      .audit td:first-child, .audit td:nth-child(2) { display: inline-block; width: auto; min-width: 0; margin-right: 12px; }
+      .audit td:last-child { padding-top: 10px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">MT</div><div><strong>Mac Tool Kit</strong><small>資料真實性驗收</small></div></div>
+    <nav aria-label="頁面導覽">
+      <a href="#verdict">結論</a>
+      <a href="#tab-audit">八個 Tab 稽核</a>
+      <a href="#storage">磁碟清理</a>
+      <a href="#ai-model">AI Session Mockup</a>
+      <a href="#provenance">資料與計費規則</a>
+      <a href="#history">Active / History</a>
+      <a href="#architecture">程式架構</a>
+      <a href="#phases">實作階段</a>
+      <a href="#decisions">已接受決策</a>
+    </nav>
+    <div class="sidebar-note">Snapshot<br>2026-08-29 22:10<br><span class="good">v1.3.0 package + Retina README ready · coverage blocked</span></div>
+  </aside>
+
+  <main>
+    <section id="verdict" class="hero">
+      <div class="eyebrow">Truth-safety implementation · Verification status</div>
+      <h1>v1.3.0 發行包與八個 Tab 高解析截圖已驗證；coverage gate 尚未通過。</h1>
+      <p class="lede">AI session、token／API 等價美元、Docker 狀態、核心類型、元件溫度、風扇轉速、網路計數、Lag 結論與磁碟容量都採來源導向。永久 History 採分層收合、40 筆分批載入與手動同步；RAM 頁已移除無法清 inactive pages 的 purge 假動作。磁碟組成只呈現成功讀取部分的下限，清理採白名單、影響分級與二次確認；未掃描空間不猜內容。</p>
+      <div class="legend" aria-label="證據標籤">
+        <span class="chip good"><span class="dot"></span>Measured 實測</span>
+        <span class="chip info"><span class="dot"></span>Provider-reported 供應商回報</span>
+        <span class="chip warn"><span class="dot"></span>Derived 衍生</span>
+        <span class="chip warn"><span class="dot"></span>Estimated 估算</span>
+        <span class="chip bad"><span class="dot"></span>Inferred 推論</span>
+        <span class="chip"><span class="dot"></span>Unavailable 無資料</span>
+      </div>
+      <div class="verdict-line">
+        <div><span>Current verdict</span><strong class="warn">Native QA pass · coverage blocked</strong></div>
+        <div><span>Truth fixes</span><strong class="good">8 / 8</strong></div>
+        <div><span>Swift tests</span><strong class="good">71 / 71</strong></div>
+        <div><span>Combined coverage</span><strong class="warn">71.04%</strong></div>
+      </div>
+    </section>
+
+    <section id="tab-audit">
+      <div class="section-head reveal"><div><div class="eyebrow">Implementation matrix</div><h2>八個 Tab 的 P0 失真已修</h2></div><p>下列 PASS 代表程式、自動化與安裝版原生畫面都已檢查；破壞性處置仍另列為未執行。</p></div>
+      <table class="audit reveal">
+        <thead><tr><th>Tab</th><th>狀態</th><th>已確認事實與主要問題</th></tr></thead>
+        <tbody>
+          <tr><td>系統總覽</td><td><span class="status pass">NATIVE PASS</span></td><td><ul class="finding-list"><li>移除 1,800 RPM fallback；沒有讀回就顯示不可取得。</li><li>Docker stats 的 CPU／RAM 與 docker ps 的 image、Up／healthy 狀態依容器 ID 合併。</li><li>21:44 安裝版畫面已核對。</li></ul></td></tr>
+          <tr><td>AI 寫程式分析</td><td><span class="status pass">RUNTIME PASS · P0</span></td><td><ul class="finding-list"><li>Project → Main → Child 只用 exact cwd 與 explicit parent ID。</li><li>Codex 由本機 latest turn state 判定；其他 provider 交叉比對 Mac 程序、project CWD 與 30 秒 transcript freshness。只有專案 CWD、沒有 exact session ID 時，不會把超過 24 小時的歷史 session 標成 Idle。</li><li>「實際扣款」已移除；只保留逐模型 token 與官方標準費率的 API 等價估算，來源不足時不套 fallback。</li><li>6,244 筆永久索引改成專案／主 Session／找不到父 Session 群組逐層收合；每分支最多先畫 40 筆，子關係用預建索引查找，History 不做背景重掃。</li><li>Recent 專案列直接顯示主／子數量；20:27 安裝版實測 ai-awesome 1 主＋166 子、artogo-infra 1＋136、ai-driven-company 1＋2、backend 0 主＋23 個缺父紀錄子 Session。選取子 Session 可揭露唯一父分支，刷新後仍保留手動收合。</li><li>Claude 的 <code>~/.claude</code> 非 sidechain 紀錄改標「內部背景工作／獨立 Runtime」，不再誤稱專案主 Session。</li><li>00:22 最終安裝版原生驗收：History 點擊至 accessibility capture 為 1.490 秒、Hunterest 展開為 1.376 秒（皆包含自動化與擷取成本，不是純 render benchmark）；只畫前 40 筆並顯示剩餘 405 筆，主 Session 收合後不殘留子列或分頁控制。</li></ul></td></tr>
+          <tr><td>Lag 診斷中心</td><td><span class="status pass">NATIVE PASS</span></td><td><ul class="finding-list"><li>分數明示為規則衍生；主要原因不能再得到 Smooth 結論。</li><li>正常記憶體壓力不會只因單一 4.9 GiB 行程就建議終止；高壓時也只報「目前佔用」，不承諾釋放量。</li></ul></td></tr>
+          <tr><td>CPU 運算</td><td><span class="status pass">NATIVE PASS</span></td><td><ul class="finding-list"><li>Mach tick 納入 nice bucket，physical core 取 hw.physicalcpu。</li><li>perflevel 標籤明示為群組數量依序推導，不再假造 P/E 分類。</li></ul></td></tr>
+          <tr><td>記憶體 RAM</td><td><span class="status pass">NATIVE PASS</span></td><td><ul class="finding-list"><li>active + wired + compressed 明示為 Dashboard 衍生量；不是官方 Memory Pressure。</li><li>free pages 不再冒充 available；inactive pages 標成 macOS 可自動回收。</li><li><code>purge(8)</code> 只清 disk buffer cache、不影響 anonymous memory，因此 RAM、menu bar、app menu 與 Lag 的 purge 入口全部移除。</li></ul></td></tr>
+          <tr><td>磁碟與網路</td><td><span class="status pass">NATIVE PASS</span></td><td><ul class="finding-list"><li>二進位單位統一為 GiB／MiB／KiB；網路改用 NET_RT_IFLIST2 64-bit 計數器並標示介面自開機累計。</li><li>新增具名分類實測、未分類剩餘量、部分可讀標籤，以及有總時限的背景掃描；不把結果冒充 Apple 完整 Storage index。</li><li>清理預設不選項目，只接受固定白名單並要求二次確認；Docker volumes 獨立顯示且不提供 prune。</li><li>取消移到固定底部操作列並支援 Esc；安裝版已用指標與鍵盤分別關閉，沒有進入清理確認。</li></ul></td></tr>
+          <tr><td>風扇與散熱</td><td><span class="status pass">RUNTIME PASS</span></td><td><ul class="finding-list"><li>AppleSMC ABI 已補齊為 80 bytes，並保留第一次 key metadata；helper 1.1.0 已讀回左右風扇 RPM 與硬體範圍。</li><li>18:07 此機實測為 3 個來源群組、16 個具名點：SoC／PMU 14、AppleSmartBattery 1、NAND CH0 1。</li><li>介面保留 3 張群組摘要卡，並在預設展開的明細逐點顯示 PMU tdie1–14、AppleSmartBattery Temperature 與 NAND CH0 temp；收合／展開行為已在安裝版驗證。</li><li>CPU／GPU／ANE／RAM 等 nil 卡、衍生最高值重複卡與缺值電池功率列全部移除；Tp*／Tg*／Tm* 沒有公開的跨機型元件對照，因此不冒充特定元件。</li></ul></td></tr>
+          <tr><td>行程管理員</td><td><span class="status pass">VIEW PASS</span></td><td><ul class="finding-list"><li>列出所有可讀 PID；實測欄位與 cwd／父行程推導欄位分開說明。</li><li>1000-point 最小寬度改成 compact columns，保留名稱／來源、CPU、RAM 與動作；類別、PID、uptime 在列明細可查。</li><li>Claude Desktop 不再誤認為 Claude Code；worktree 回到父專案；常見 token、password、Bearer 與 URL credential 會遮蔽。終止動作未執行。</li></ul></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="storage">
+      <div class="section-head reveal"><div><div class="eyebrow">Storage composition &amp; reclaim</div><h2>先量測、再選擇、最後用實際結果回報</h2></div><p>介面不提供模糊的「一鍵全清」。使用者先看容量、路徑、影響和後果，再選擇允許的項目；Docker 資料卷永遠不混入一般清理。</p></div>
+      <div class="workspace reveal" aria-label="磁碟容量與清理介面 mockup">
+        <aside>
+          <h3>21:16 實測快照</h3>
+          <div class="project-link selected">具名分類 <span class="good">49.5 GiB</span></div>
+          <div class="project-link">磁碟已使用 <span class="warn">525.9 GiB</span></div>
+          <div class="project-link">未分類 <span>476.3 GiB</span></div>
+          <p class="note">8 個分類部分可讀；數字只代表成功掃描的下限。</p>
+        </aside>
+        <div class="work-area">
+          <div class="tree-row"><div><div class="title">AI 工具資料</div><div class="meta">33.7 GiB · 49,189 files · 部分可讀</div></div><div class="metrics"><span class="source">Measured lower bound</span></div></div>
+          <div class="tree-row"><div><div class="title">npm 套件快取</div><div class="meta">低影響 · 刪後可重新下載 · exact allow-list</div></div><div class="metrics"><span class="status partial">未預選</span></div></div>
+          <div class="tree-row"><div><div class="title">Docker Volumes</div><div class="meta">可能包含資料庫；只能到 Docker Desktop 個別檢查</div></div><div class="metrics"><span class="status fail">不提供刪除</span></div></div>
+        </div>
+      </div>
+      <div class="flow reveal">
+        <div class="node"><strong>1 · 背景量測</strong><span>本機配置區塊 · 不讀內容 · 有總時限</span></div>
+        <div class="node"><strong>2 · 影響選擇</strong><span>預設全不選 · 底部取消與 Esc 可隨時退出</span></div>
+        <div class="node"><strong>3 · 二次確認</strong><span>只允許 exact allow-list；未知 ID fail closed</span></div>
+        <div class="node"><strong>4 · 重新量測</strong><span>回報項目減少量與 volume free-space delta</span></div>
+      </div>
+      <p class="note">真實使用者檔案未為了驗收而刪除。Temporary fixture 已驗證刪除範圍與 after-state；安裝版的清理 sheet 已驗證固定底部取消按鈕與 Esc 都會關閉且不觸發清理。Docker 的 Images／Containers／Volumes／Build Cache 只顯示 Docker 自己回報的可回收量。</p>
+    </section>
+
+    <section id="ai-model">
+      <div class="section-head reveal"><div><div class="eyebrow">AI analytics</div><h2>資料模型與畫面已同步落地</h2></div><p>層級固定為「專案資料夾 → 主 session → 子 session」。沒有明確 parent ID、或父紀錄不在本機索引的子 session，會進入「找不到父 Session」群組；跨 Recent／History 的父 session 只作脈絡顯示。</p></div>
+      <div class="comparison reveal">
+        <div><h3>Standalone Dashboard 能證明</h3><div class="big good">cwd · tokens · parent</div><p>Codex rollout 提供 session ID、exact cwd、model context、provider token total 與 parent_thread_id。</p></div>
+        <div><h3>Standalone Dashboard 不能證明</h3><div class="big warn">subscription spend</div><p>本機日誌不是 invoice 或 credits 來源，因此介面不再顯示「實際扣款」。能計算的是官方標準 API 費率等價值。</p></div>
+      </div>
+
+      <div class="workspace reveal" aria-label="AI session 新版介面 mockup">
+        <aside>
+          <h3>Projects</h3>
+          <div class="project-link selected">Mac 工具 <span class="good">· 1</span></div>
+          <div class="project-link">Travian <span class="good">· 1</span></div>
+          <div class="project-link">peterting (Home) <span class="warn">· unresolved</span></div>
+          <div class="project-link">Unlinked agents <span class="warn">· review</span></div>
+        </aside>
+        <div class="work-area">
+          <div class="tabs"><button class="active" data-panel="active">Active · 3 exact</button><button data-panel="recent">Recent 24h</button><button data-panel="history">History</button></div>
+          <div data-content="active">
+            <div class="tree-row"><div><div class="title"><span class="good">●</span> mac-tool-kit / #01a047b9</div><div class="meta">Active · Codex latest turn = inProgress · exact cwd</div></div><div class="metrics"><span class="source">Provider-reported</span><br>model + token buckets<br>API equivalent only</div></div>
+            <div class="tree-row"><div><div class="title"><span class="good">●</span> travian-tools / #01a042a1</div><div class="meta">Active · Codex latest turn = inProgress · exact cwd</div></div><div class="metrics"><span class="source">Provider-reported</span><br>model + token buckets<br>API equivalent only</div></div>
+            <div class="tree-row"><div><div class="title"><span class="good">●</span> hunterest / #01a03d16</div><div class="meta">Active · canonical migrated thread ID · latest command cwd</div></div><div class="metrics"><span class="source">Provider-reported</span><br>model + token buckets<br>API equivalent only</div></div>
+          </div>
+          <div data-content="recent" hidden><div class="tree-row"><div><div class="title"><span class="warn">●</span> /Users/peterting/Documents/program/mac-tool-kit</div><div class="meta">Idle／Inactive · exact cwd · provider timestamps</div></div><div class="metrics"><span class="source">Measured + derived</span><br>tokens if available<br>API equivalent: shown when exact</div></div><p>最近 24 小時有活動但目前沒有執行證據的項目在此；只有 ID／路徑／時間戳的紀錄預設隱藏，可用「顯示僅活動紀錄」查看，且不納入 token／費用分析。</p></div>
+          <div data-content="history" hidden><p>24 小時後進入永久 JSON history index；預設只畫收合的專案列。專案、主 Session 與找不到父 Session 群組可獨立收合，每次最多載入 40 筆；History 只在手動重新整理時重掃。</p></div>
+        </div>
+      </div>
+      <p class="note">本機 task 日誌沒有 invoice／subscription／credits 欄位，因此「實際扣款」整個 UI 已移除。若有精確模型與可計價 token buckets，介面預設顯示帶費率日期的「API 等價估算（非帳單）」；未知模型或 cache TTL 不明時不套 fallback rate。Metadata-only 紀錄保留 provenance，但不顯示不存在的模型／token／費用欄位，也不進入用量彙總。</p>
+    </section>
+
+    <section id="provenance">
+      <div class="section-head reveal"><div><div class="eyebrow">Source contract</div><h2>每個數字先回答「從哪裡來」</h2></div><p>介面層不得接收一個沒有 provenance 的裸數字。衍生與估算可以存在，但不能併入「實際」總額。</p></div>
+      <div class="flow reveal">
+        <div class="node"><strong>Provider / OS</strong><span>task status、rollout、Mach、sysctl、Docker、SMC</span></div>
+        <div class="node"><strong>Normalized events</strong><span>source、timestamp、confidence、sessionId、parentSessionId</span></div>
+        <div class="node"><strong>Aggregation</strong><span>只聚合相同語意與時間範圍；避免重疊 duration</span></div>
+        <div class="node"><strong>UI contract</strong><span>value + unit + source + freshness + classification</span></div>
+      </div>
+      <div class="rule-grid reveal">
+        <div class="rule"><div class="n">01 · TOKENS</div><h3>供應商欄位才叫 token</h3><p>Codex rollout 有真實 input、cached input、output 與 reasoning output；Claude message usage 也可讀。字串長度換算只能叫 estimate，且預設不納入。</p></div>
+        <div class="rule"><div class="n">02 · COST</div><h3>只顯示 API 標準費率等價值</h3><p>ChatGPT／Claude 訂閱活動不能冒充 API 美元帳單。「實際扣款」不出現在介面；API-equivalent estimate 預設顯示，並標成非帳單與 rate version。</p></div>
+        <div class="rule"><div class="n">03 · TIME</div><h3>三種時間不得混用</h3><p>last activity、transcript span、active execution time 分欄。跨日誌、睡眠、重開機的 first-to-last span 不能標成「已運作」。</p></div>
+        <div class="rule"><div class="n">04 · PROJECT</div><h3>cwd 或明確 mapping</h3><p>先用 task 的 exact cwd，再用已保存的 projectId／user mapping。不能從 session title、plugin runner 或最後一段目錄猜。</p></div>
+        <div class="rule"><div class="n">05 · RELATIONSHIP</div><h3>Explicit parent only</h3><p>Claude nested path 已提供 main session ID 與 agent ID；讀不到 parent、或父紀錄不在本機索引時明示「找不到父 Session」，不假造樹狀關係。Claude 內部非 sidechain runtime 另列為獨立工作，不冒充專案 hierarchy。</p></div>
+        <div class="rule"><div class="n">06 · COVERAGE</div><h3>缺欄位不冒充分析資料</h3><p>0、1,800 RPM、預設 model、預設 32°C 都不是缺資料的替代品。分析型清單省略空欄位；安全控制若缺必要讀值則明示原因並 fail closed。</p></div>
+      </div>
+    </section>
+
+    <section id="history">
+      <div class="section-head reveal"><div><div class="eyebrow">Lifecycle &amp; user flow</div><h2>Active 與 History 是狀態，不是檔案新舊</h2></div><p>重開機不會刪除 Claude／Codex／Antigravity 的持久日誌，所以 24 或 86 小時的 transcript span 可能存在；它不是 live duration。只有活動 metadata 的紀錄永久保留，但 Recent／History 預設不混入用量分析。</p></div>
+      <div class="timeline reveal">
+        <div class="state"><strong class="good">Active</strong><p>Codex latest turn 明確為 inProgress，或 matching provider process + project CWD + 30 秒內 transcript 活動。</p><div class="trigger">enter: exact or cross-checked evidence<br>exit: turn ends or activity stops</div></div>
+        <div class="state"><strong class="warn">Idle</strong><p>同專案 provider 程序仍存在，但該 session 沒有近期 transcript 活動。</p><div class="trigger">enter: process match only<br>exit: fresh activity or process exit</div></div>
+        <div class="state"><strong class="info">Recent Inactive</strong><p>目前沒有 matching provider process，但最後活動仍在 24 小時內，方便續接與快速查找。</p><div class="trigger">enter: no runtime evidence<br>exit: inactivity ≥ 24h</div></div>
+        <div class="state"><strong>History</strong><p>24 小時後移入永久索引；專案預設收合、分支每批 40 筆，且不在背景週期重掃。專案內另一個程序存在，不足以把歷史 session 標成 Idle。</p><div class="trigger">retention: permanent<br>refresh: manual<br>delete UI: not covered</div></div>
+      </div>
+    </section>
+
+    <section id="architecture">
+      <div class="section-head reveal"><div><div class="eyebrow">Implementation architecture</div><h2>已用來源合約建立可追溯資料層</h2></div><p>Provider adapters 先產生帶 provenance 的 normalized session，再由 lifecycle、hierarchy 與 cost policy 決定 UI；永久歷史與檔案快取使用獨立原子 JSON。</p></div>
+      <div class="architecture reveal">
+        <div class="arch-block"><h3>Adapters</h3><ul><li>Codex rollout + read-only thread status DB</li><li>Claude main/subagent reader + process CWD</li><li>Antigravity capability adapter</li><li>IOHID named-temperature + fan helper adapter</li></ul></div>
+        <div class="arrow">→</div>
+        <div class="arch-block"><h3>Local normalized store</h3><ul><li>ProjectRecord</li><li>SessionRecord + parentSessionId</li><li>UsageEvent + source classification</li><li>ExecutionInterval</li><li>SourceHealth / freshness</li><li>Schema version + non-destructive migration</li></ul></div>
+        <div class="arrow">→</div>
+        <div class="arch-block"><h3>Queries &amp; UI</h3><ul><li>Active / Idle / Inactive</li><li>Recent 24h</li><li>Collapsed History + 40-row paging</li><li>Indexed parent-child lookup</li><li>API estimate provenance</li><li>Unlinked relationship review</li></ul></div>
+      </div>
+    </section>
+
+    <section id="phases">
+      <div class="section-head reveal"><div><div class="eyebrow">Phase mapping</div><h2>四階段程式實作已完成</h2></div><p>release gate 仍保留，不因程式可編譯或測試全過就自動宣稱可信任。</p></div>
+      <div class="phase reveal"><strong>Phase 0</strong><p><b>Truth safety patch：</b>隱藏或標示不可證明的費用與 token；移除假溫度與 1,800 RPM fallback；fan control 不再由估算溫度驅動；Lag remediation 加保護。</p><span class="status pass">IMPLEMENTED</span></div>
+      <div class="phase reveal"><strong>Phase 1</strong><p><b>Source contracts：</b>建立 provenance／unavailable；修正 64-bit network、CPU topology 語意、process redaction、action result/readback。</p><span class="status pass">IMPLEMENTED</span></div>
+      <div class="phase reveal"><strong>Phase 2</strong><p><b>AI data model：</b>Codex exact cwd/token/runtime state、Claude nested subagent/process matching、explicit parentSessionId、Active／Idle／Inactive 與 Unlinked queue。</p><span class="status pass">IMPLEMENTED</span></div>
+      <div class="phase reveal"><strong>Phase 3</strong><p><b>History UX：</b>atomic local history index、Recent 24h、逐層收合、40 筆分批呈現、indexed child lookup、History manual refresh。</p><span class="status pass">IMPLEMENTED</span></div>
+      <div class="phase reveal"><strong>Phase 4</strong><p><b>Storage &amp; responsive UX：</b>bounded lower-bound composition、cleanup allow-list、impact selection、Docker separation，以及八個 tab 的 1000-point 最小視窗人工驗收。</p><span class="status pass">IMPLEMENTED</span></div>
+      <div class="phase reveal"><strong>Release gate</strong><p>八個 tab 已重拍為 1440 × 1050 PNG 並以原始像素讀取；v1.3.0 DMG／ZIP 的 bundle version 與 codesign 已驗證，71 tests 全過。整體 line coverage 為 71.04%（4,704 / 6,622），仍未達 repo 95% gate；真實檔案清理、終止行程與風扇寫入維持獨立 manual not-covered。</p><span class="status partial">COVERAGE BLOCKED</span></div>
+    </section>
+
+    <section id="decisions">
+      <div class="section-head reveal"><div><div class="eyebrow">Decision record</div><h2>七個產品決策已接受並落地</h2></div><p>選項保留作為規格紀錄；實作與 repo tracker 已採用勾選方案。</p></div>
+      <div class="decision reveal"><div><h3>Active 定義</h3><p class="note">DEC-001 · ACCEPTED · UPDATED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="active" checked disabled>Codex 用 exact turn state；其他 provider 用 Mac 程序、project CWD 與 transcript freshness 交叉判定 Active／Idle／Inactive</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>Recent 時間</h3><p class="note">DEC-002 · ACCEPTED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="recent" checked disabled>Idle／Inactive 最近活動保留 Recent 24 小時，再移入永久 History</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>費用顯示</h3><p class="note">DEC-003 · ACCEPTED · UPDATED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="cost" checked disabled>拔除「實際扣款」；有精確模型與 token buckets 時預設顯示 API-equivalent 估算（非帳單）</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>缺值呈現</h3><p class="note">DEC-004 · ACCEPTED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="coverage" checked disabled>溫度只顯示實測物理元件；AI metadata-only 紀錄保留歷史，但 Recent／History 預設分流，Active 永不隱藏</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>History 效能</h3><p class="note">DEC-005 · ACCEPTED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="history-performance" checked disabled>History 預設收合、每批 40 筆且手動同步；Active 10 秒、Recent 30 秒更新</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>Inactive RAM</h3><p class="note">DEC-006 · ACCEPTED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="memory-purge" checked disabled>移除 purge 假清理；inactive pages 由 macOS 自動回收，Lag 改導向實際高用量行程</label></div></fieldset></div>
+      <div class="decision reveal"><div><h3>磁碟清理</h3><p class="note">DEC-007 · ACCEPTED</p></div><fieldset><legend>已落地</legend><div class="options"><label><input type="radio" name="storage-reclaim" checked disabled>只用具名實測與未分類剩餘量；清理採白名單、影響選擇、二次確認與 after-state，Docker volumes 不自動刪</label></div></fieldset></div>
+      <p class="note">本輪沒有為了測試而刪真實使用者檔案、結束行程或寫入風扇。purge 已因技術語意不成立而從 RAM remediation 移除。</p>
+    </section>
+  </main>
+
+  <script>
+    const sections = [...document.querySelectorAll('main section[id]')];
+    const links = [...document.querySelectorAll('nav a')];
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          links.forEach(link => link.classList.toggle('active', link.hash === `#${entry.target.id}`));
+        }
+      });
+    }, { rootMargin: '-25% 0px -65% 0px' });
+    sections.forEach(section => observer.observe(section));
+
+    const revealObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          revealObserver.unobserve(entry.target);
+        }
+      });
+    }, { threshold: .12 });
+    document.querySelectorAll('.reveal').forEach(element => revealObserver.observe(element));
+
+    document.querySelectorAll('.tabs button').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.tabs button').forEach(item => item.classList.remove('active'));
+        button.classList.add('active');
+        document.querySelectorAll('[data-content]').forEach(panel => {
+          panel.hidden = panel.dataset.content !== button.dataset.panel;
+        });
+      });
+    });
+  </script>
+</body>
+</html>

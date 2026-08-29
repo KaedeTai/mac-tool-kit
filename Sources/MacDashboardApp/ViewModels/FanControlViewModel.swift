@@ -9,20 +9,21 @@ public final class FanControlViewModel: ObservableObject {
 
     @Published public var isHelperInstalled: Bool = false
     @Published public var isHelperRunning: Bool = false
+    @Published public var helperCapability: FanHelperCapability = .unreachable
     @Published public var isInstallingHelper: Bool = false
     @Published public var selectedMode: FanMode = .automatic
-    @Published public var selectedSensorTarget: ThermalSensorTarget = .palmRest
+    @Published public var selectedSensorTarget: ThermalSensorTarget = .socPackage
     @Published public var customRPM: Double = 3000
     @Published public var fanStatuses: [FanStatus] = []
     @Published public var componentReadings: [ComponentThermalReading] = []
     @Published public var currentActiveRPM: Int = 0
-    @Published public var currentTargetTemp: Int = 34
-    @Published public var currentMonitoredTemp: Double = 36.0
-    @Published public var fanStateDescription: String = "低溫靜音停轉中 (0 RPM)"
+    @Published public var currentTargetTemp: Int = 65
+    @Published public var currentMonitoredTemp: Double? = nil
+    @Published public var fanStateDescription: String = "等待硬體讀回"
+    @Published public var helperSecurityWarning: String? = nil
     @Published public var message: String? = nil
     @Published public var errorMessage: String? = nil
 
-    private let smc = SMCBridge.shared
     private let helperManager = PrivilegedHelperManager.shared
     private let helperClient = FanHelperClient.shared
     private let sensorMonitor = HardwareSensorMonitor()
@@ -39,12 +40,39 @@ public final class FanControlViewModel: ObservableObject {
         startPolling()
     }
 
+    public var hasMeasuredTemperatureForSelectedTarget: Bool {
+        guard selectedSensorTarget != .palmRest else { return false }
+        return componentReadings.first(where: { $0.target == selectedSensorTarget })?.temperatureCelsius != nil
+    }
+
+    public var measuredComponentReadings: [ComponentThermalReading] {
+        ThermalSensorPresentation.measuredPhysicalReadings(from: componentReadings)
+    }
+
+    public var measuredSensorTargets: [ThermalSensorTarget] {
+        measuredComponentReadings.map(\.target)
+    }
+
+    public var measuredSensorPointCount: Int {
+        ThermalSensorPresentation.measuredPointCount(from: componentReadings)
+    }
+
+    public var supportedManualRPMRange: ClosedRange<Double>? {
+        guard !fanStatuses.isEmpty,
+              fanStatuses.allSatisfy({ $0.minRPM > 0 && $0.maxRPM >= $0.minRPM }) else { return nil }
+        let lower = Double(fanStatuses.map(\.minRPM).max()!)
+        let upper = Double(fanStatuses.map(\.maxRPM).min()!)
+        return lower <= upper ? lower...upper : nil
+    }
+
     public func checkHelperStatus() {
         self.isHelperInstalled = helperManager.isInstalled()
+        self.helperSecurityWarning = currentHelperSecurityWarning()
         Task {
-            let running = await helperManager.isRunning()
+            let capability = await helperManager.capability()
             await MainActor.run {
-                self.isHelperRunning = running
+                self.helperCapability = capability
+                self.isHelperRunning = capability != .unreachable
                 self.refresh()
             }
         }
@@ -60,10 +88,12 @@ public final class FanControlViewModel: ObservableObject {
 
     public func refresh() {
         Task {
-            let running = await self.helperManager.isRunning()
+            let capability = await self.helperManager.capability()
             await MainActor.run {
                 self.isHelperInstalled = self.helperManager.isInstalled()
-                self.isHelperRunning = running
+                self.helperCapability = capability
+                self.isHelperRunning = capability != .unreachable
+                self.helperSecurityWarning = self.currentHelperSecurityWarning()
             }
 
             // Execute Closed-Loop Thermal Controller Pass with Anti-Hunting Hysteresis
@@ -71,44 +101,46 @@ public final class FanControlViewModel: ObservableObject {
         }
     }
 
+    private func currentHelperSecurityWarning() -> String? {
+        guard case .unsafe(let reason) = helperClient.socketTrustStatus() else { return nil }
+        return "已拒絕連線舊版不安全 helper（\(reason)）；請重新安裝後再使用風扇讀寫。"
+    }
+
     /// 智慧閉迴路動態溫控演算法（含遲滯防抖與平滑降溫保護）
     private func applyDynamicClosedLoopControl() async {
-        // 1. 取樣全機各元件硬體溫度
-        let readings = sensorMonitor.sampleAllComponents()
+        let baseReadings = sensorMonitor.sampleAllComponents()
+        let readings = baseReadings
+        let rawSensorTemp = selectedSensorTarget == .palmRest
+            ? nil
+            : readings.first(where: { $0.target == selectedSensorTarget })?.temperatureCelsius
 
-        // 2. 取得當前選定基準元件之原始即時溫度
-        let rawSensorTemp: Double
-        if selectedSensorTarget == .peakHotspot {
-            rawSensorTemp = readings.map { $0.temperatureCelsius }.max() ?? 36.0
-        } else {
-            rawSensorTemp = readings.first(where: { $0.target == selectedSensorTarget })?.temperatureCelsius ?? 36.0
-        }
-
-        // 3. 指數移動平均濾波 (Exponential Moving Average, alpha = 0.35)
-        let alpha = 0.35
-        let currentSmoothedTemp: Double
-        if let prev = smoothedTemperature {
-            currentSmoothedTemp = (alpha * rawSensorTemp) + ((1.0 - alpha) * prev)
+        let currentSmoothedTemp: Double?
+        if let rawSensorTemp, let previous = smoothedTemperature {
+            currentSmoothedTemp = (0.35 * rawSensorTemp) + (0.65 * previous)
         } else {
             currentSmoothedTemp = rawSensorTemp
         }
-        self.smoothedTemperature = currentSmoothedTemp
+        smoothedTemperature = currentSmoothedTemp
 
         var targetRPM = 0
-        var statusDesc = "低溫靜音停轉中 (0 RPM)"
+        var statusDesc = "等待策略評估與硬體讀回"
         var activeTargetTemp = selectedSensorTarget.defaultTargetTemp
 
         switch selectedMode {
         case .automatic:
             targetRPM = 0
-            statusDesc = "Apple 原廠微碼自動控溫中 (0 RPM)"
+            statusDesc = "已要求交回 macOS 原廠自動控制；實際 RPM 見上方讀回值"
             spinDownCooldownCycles = 0
             lastOutputRPM = 0
-            if isHelperRunning {
-                _ = await helperClient.setAllAuto()
-            }
+            if isHelperRunning { _ = await helperClient.setAllAuto() }
 
         case .quiet(let targetTemp):
+            guard let currentSmoothedTemp else {
+                targetRPM = 0
+                statusDesc = "溫度來源不可取得；已停用自訂閉迴路並交回 macOS 原廠控制"
+                if isHelperRunning { _ = await helperClient.setAllAuto() }
+                break
+            }
             activeTargetTemp = (selectedSensorTarget == .palmRest ? 36 : (selectedSensorTarget == .socPackage ? 70 : targetTemp))
             let calculated = calculateHysteresisRPM(
                 currentTemp: currentSmoothedTemp,
@@ -123,6 +155,12 @@ public final class FanControlViewModel: ObservableObject {
             await dispatchFanRPM(targetRPM)
 
         case .balanced(let targetTemp):
+            guard let currentSmoothedTemp else {
+                targetRPM = 0
+                statusDesc = "溫度來源不可取得；已停用自訂閉迴路並交回 macOS 原廠控制"
+                if isHelperRunning { _ = await helperClient.setAllAuto() }
+                break
+            }
             activeTargetTemp = (selectedSensorTarget == .palmRest ? 34 : (selectedSensorTarget == .socPackage ? 60 : targetTemp))
             let calculated = calculateHysteresisRPM(
                 currentTemp: currentSmoothedTemp,
@@ -137,6 +175,12 @@ public final class FanControlViewModel: ObservableObject {
             await dispatchFanRPM(targetRPM)
 
         case .maxCooling:
+            guard let currentSmoothedTemp else {
+                targetRPM = 0
+                statusDesc = "溫度來源不可取得；已停用自訂閉迴路並交回 macOS 原廠控制"
+                if isHelperRunning { _ = await helperClient.setAllAuto() }
+                break
+            }
             activeTargetTemp = (selectedSensorTarget == .palmRest ? 32 : (selectedSensorTarget == .socPackage ? 48 : 50))
             let calculated = calculateHysteresisRPM(
                 currentTemp: currentSmoothedTemp,
@@ -156,11 +200,14 @@ public final class FanControlViewModel: ObservableObject {
             spinDownCooldownCycles = 0
             lastOutputRPM = rpm
             if isHelperRunning {
-                _ = await helperClient.setFanSpeed(fanIndex: 0, rpm: rpm)
-                _ = await helperClient.setFanSpeed(fanIndex: 1, rpm: rpm)
+                if !(await helperClient.setAllFanSpeeds(rpm: rpm)) {
+                    statusDesc = "設定失敗或無法確認風扇清單；已交回 macOS 原廠控制"
+                    _ = await helperClient.setAllAuto()
+                }
             }
         }
 
+        let readback = isHelperRunning ? await helperClient.getFanStatuses(currentMode: selectedMode) : nil
         let updatedRPM = targetRPM
         let updatedDesc = statusDesc
         let updatedMonitoredTemp = currentSmoothedTemp
@@ -168,30 +215,20 @@ public final class FanControlViewModel: ObservableObject {
 
         await MainActor.run {
             self.componentReadings = readings
+            if !self.measuredSensorTargets.contains(self.selectedSensorTarget),
+               let firstMeasuredTarget = self.measuredSensorTargets.first {
+                self.selectedSensorTarget = firstMeasuredTarget
+                self.smoothedTemperature = nil
+            }
             self.currentActiveRPM = updatedRPM
             self.currentMonitoredTemp = updatedMonitoredTemp
             self.currentTargetTemp = updatedTargetTemp
             self.fanStateDescription = updatedDesc
 
-            let f1 = FanStatus(
-                fanIndex: 0,
-                name: "左側風扇 (Fan 1)",
-                currentRPM: updatedRPM,
-                minRPM: 1200,
-                maxRPM: 6200,
-                targetRPM: updatedRPM,
-                mode: self.selectedMode
-            )
-            let f2 = FanStatus(
-                fanIndex: 1,
-                name: "右側風扇 (Fan 2)",
-                currentRPM: updatedRPM,
-                minRPM: 1200,
-                maxRPM: 6200,
-                targetRPM: updatedRPM,
-                mode: self.selectedMode
-            )
-            self.fanStatuses = [f1, f2]
+            self.fanStatuses = readback ?? []
+            if let range = self.supportedManualRPMRange {
+                self.customRPM = min(range.upperBound, max(range.lowerBound, self.customRPM))
+            }
         }
     }
 
@@ -268,8 +305,7 @@ public final class FanControlViewModel: ObservableObject {
         if rpm == 0 {
             _ = await helperClient.setAllAuto()
         } else {
-            _ = await helperClient.setFanSpeed(fanIndex: 0, rpm: rpm)
-            _ = await helperClient.setFanSpeed(fanIndex: 1, rpm: rpm)
+            _ = await helperClient.setAllFanSpeeds(rpm: rpm)
         }
     }
 
@@ -292,7 +328,7 @@ public final class FanControlViewModel: ObservableObject {
                 case .success:
                     self.isHelperInstalled = true
                     self.isHelperRunning = true
-                    self.showMessage("✅ 成功安裝並啟用硬體特權風扇控制！")
+                    self.showMessage("✅ 已安裝，並通過實際 RPM 與硬體範圍讀回驗證")
                     self.refresh()
                 case .failure(let err):
                     self.errorMessage = "安裝失敗：\(err)"
@@ -326,9 +362,8 @@ public final class FanControlViewModel: ObservableObject {
     public func selectMode(_ mode: FanMode) {
         self.selectedMode = mode
         self.spinDownCooldownCycles = 0
-        smc.setFanMode(mode)
         refresh()
-        showMessage("已啟用散熱策略：\(mode.title)")
+        showMessage("已要求切換散熱策略：\(mode.title)；以實際 RPM 讀回結果為準")
     }
 
     public func applyCustomRPM() {
@@ -336,9 +371,8 @@ public final class FanControlViewModel: ObservableObject {
         let mode = FanMode.custom(rpm: rpm)
         self.selectedMode = mode
         self.spinDownCooldownCycles = 0
-        smc.setFanMode(mode)
         refresh()
-        showMessage("已鎖定手動固定轉速：\(rpm) RPM")
+        showMessage("已要求設定目標轉速：\(rpm) RPM；目標值不等於實際 RPM")
     }
 
     private func showMessage(_ msg: String) {

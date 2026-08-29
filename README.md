@@ -1,167 +1,155 @@
 <div align="center">
 
-# 🛠️ MacDashboard (Mac Tool Kit)
+# MacDashboard (Mac Tool Kit)
 
-**The Ultimate High-Performance System Monitor, Lag Detective & Closed-Loop Thermal Controller for Apple Silicon & macOS.**
+**A source-aware macOS operations dashboard for CPU, memory, storage, network, thermal sensors, fans, processes, Docker, and AI coding sessions.**
 
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-blue?logo=apple&logoColor=white)](https://www.apple.com/macos/)
-[![Swift 6](https://img.shields.io/badge/Swift-6.0-orange?logo=swift&logoColor=white)](https://swift.org/)
+[![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange?logo=swift&logoColor=white)](https://swift.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![GitHub Release](https://img.shields.io/github/v/release/PeterTing/mac-tool-kit?color=purple)](https://github.com/PeterTing/mac-tool-kit/releases/latest)
 
+Built natively with SwiftUI. Values that cannot be verified are omitted or labelled with their evidence boundary instead of being invented.
+
+[Download DMG / ZIP](https://github.com/PeterTing/mac-tool-kit/releases/latest) ·
+[Release notes](docs/releases/v1.3.0.md) ·
+[Build from source](#build-from-source) ·
+[Report an issue](https://github.com/PeterTing/mac-tool-kit/issues)
+
+</div>
+
+## Trust contract
+
+MacDashboard is designed as an inspectable dashboard, not a collection of plausible-looking numbers:
+
+- Measured values identify their macOS, provider-log, process, filesystem, or Docker source.
+- Derived values are labelled as derived and document the rule used.
+- Missing evidence stays unavailable or is omitted; it is never replaced with a guessed component temperature, session state, token count, or charge.
+- AI costs are optional **API-equivalent estimates** from provider-reported model and token fields. They are not subscription spend, credits, or billing statements.
+- Destructive actions require an explicit selection and confirmation. Docker volumes are never included in one-click cleanup.
+
+Screenshots below are direct 1440 × 1050 PNG captures from MacDashboard v1.3.0. The numbers are live samples from one Mac and will vary by machine and workload.
+
+## Dashboard tour
+
+### System overview
+
+CPU, derived RAM use, disk capacity and throughput, network transfer, battery temperature, actual fan RPM, active Docker containers, and top resource consumers in one place.
+
 <p align="center">
-  Built natively with <b>Swift 6 (Strict Concurrency)</b> and <b>SwiftUI</b>.<br>
-  Engineered for ultra-low resource overhead, AI agent process tracing, Docker container breakdown, and sensor-based thermal management.
+  <img src="assets/screenshots/overview_dashboard.png" alt="MacDashboard system overview" width="1100">
 </p>
 
-[📥 Download DMG / ZIP](https://github.com/PeterTing/mac-tool-kit/releases/latest) •
-[💡 Features](#-key-features) •
-[📖 Usage Guide](#-usage-guide) •
-[🤝 Contributing](#-contributing) •
-[🐛 Report Issue](https://github.com/PeterTing/mac-tool-kit/issues)
+### AI coding analytics
 
----
+Provider-backed sessions are organized as **project → main session → child session**, with independently collapsible levels. Active, Recent 24h, and permanent History are separate scopes. Codex can use its local turn state; other providers use the strongest available combination of process, project path, and recent transcript activity. Metadata-only records remain separate from token and cost analysis.
 
-</div>
+The estimate switch applies to project rows, session rows, and the evidence panel. When enabled, an estimate is shown only when the provider log contains both a recognized model and usable token fields.
 
-## 📸 Screenshots
+<p align="center">
+  <img src="assets/screenshots/ai_coding_analytics.png" alt="AI coding session hierarchy and evidence panel" width="1100">
+</p>
 
-### 1. 8-Component Thermal Dashboard & Closed-Loop Fan Control
-> Select specific hardware components as fan cooling targets (e.g. actively cool the Palm Rest during heavy typing, or suppress Apple Silicon SoC hotspots). Powered by an industrial **-7°C thermal hysteresis anti-hunting algorithm** to eliminate annoying fan toggling.
+### Lag diagnostics
 
-<div align="center">
-  <img src="assets/screenshots/thermal_fan_control.png" alt="Thermal Fan Control" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-</div>
+The diagnostic score is explicitly derived. Each reported cause includes the observed process and workload context; remedies such as renice or termination identify the exact target and do not promise a fabricated amount of recovered CPU or RAM.
 
-<br>
+<p align="center">
+  <img src="assets/screenshots/lag_diagnostics.png" alt="Lag diagnostic causes and targeted remedies" width="1100">
+</p>
 
-### 2. Full-Spectrum Overview Dashboard
-> Real-time CPU core breakdown (P-Cores & E-Cores), RAM architecture composition, NVMe SSD read/write throughput, network upload/download sparklines, and battery health analytics.
+### CPU compute
 
-<div align="center">
-  <img src="assets/screenshots/overview_dashboard.png" alt="Overview Dashboard" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-</div>
+Shows measured total and per-core load. Core family labels are mapped from `hw.perflevel` group names and counts, while each percentage comes from per-core Mach counters. The UI marks this distinction instead of presenting the mapping as an Apple-provided per-core identity.
 
-<br>
+<p align="center">
+  <img src="assets/screenshots/cpu_compute.png" alt="CPU overview, per-core load, and consumers" width="1100">
+</p>
 
-### 3. RAM Architecture & One-Click Cache Purge (Memory Inspector)
-> Deep inspection of Active, Wired, Compressed, and Inactive memory. Features detailed **Docker per-container RAM breakdown** and **One-Click Purge System Cache**.
+### Memory inspector
 
-<div align="center">
-  <img src="assets/screenshots/memory_inspector.png" alt="Memory Inspector" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-</div>
+Breaks out active, wired, compressed, inactive, and free pages and shows the top processes plus per-container Docker memory. The pressure badge is a documented Dashboard-derived rule, not the Activity Monitor pressure graph.
 
-<br>
+There is intentionally no RAM purge button: macOS `purge` clears disk buffer cache and cannot manually zero inactive VM pages. Inactive pages are reclaimed by macOS when needed.
 
-### 4. Smart Process Inspector & AI Root Tracing
-> Traces the root origin of background processes (e.g., identifies scripts spawned by Claude Code, Antigravity, Cursor, uv, or Warp) instead of showing opaque process names.
+<p align="center">
+  <img src="assets/screenshots/memory_inspector.png" alt="RAM architecture and Docker memory breakdown" width="1100">
+</p>
 
-<div align="center">
-  <img src="assets/screenshots/process_inspector.png" alt="Process Inspector" width="900" style="border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);">
-</div>
+### Disk, storage cleanup, and network
 
----
+Storage composition is a lower-bound scan of named local paths. The remainder is shown as unclassified instead of being guessed. Cleanup candidates use a fixed allow-list, default to unselected, show an impact level, and are measured again after cleanup. Docker usage comes from `docker system df` and remains a separate, explanatory workflow; volume pruning is not offered.
 
-## 🌟 Key Features
+<p align="center">
+  <img src="assets/screenshots/disk_network_storage.png" alt="Measured storage composition, cleanup scope, Docker storage, and network" width="1100">
+</p>
 
-### 🧠 1. AI Coding Usage Analytics & Telemetry Center
-- **Live Active Session Telemetry**: Real-time status detection for **Claude Code**, **Antigravity**, **Cursor**, and **Ollama / Local LLMs** with live PID, CPU%, Resident RAM, and one-click session abort.
-- **Model & Task Breakdown**: Deep inspection of models invoked (`claude-3-7-sonnet`, `claude-opus-5`, `claude-3-5-haiku`, `gemini-2.5-pro`, `deepseek-r1`) and tasks performed (**Unit Testing**, **Code Editing**, **Codebase Search & Grep**, **Architecture Planning**).
-- **Granular Token & Cost Analytics**: Tracks **Input**, **Output**, **Prompt Cache Read** (90% savings), and **Thinking Tokens** per session and per task, with USD ($) and TWD (NT$) cost conversion.
-- **Chronological Turn Timeline & Project Rankings**: Complete timeline with turn durations, tool latency metrics, and top project consumption charts.
+### Thermal sensors and fan readback
 
-### 🔍 2. AI Model & Session ID Root Attribution
-- **Beyond Opaque Activity Monitor**: Modern AI coding tools spawn numerous background Python, Node, and test runner processes. MacDashboard automatically extracts and correlates:
-  - **AI Tool & Agent Name**: (e.g. `Claude Code`, `Antigravity Agent`, `Cursor AI`, `Ollama / Local LLM`).
-  - **Active AI Model**: (e.g. `claude-3-7-sonnet`, `deepseek-r1:14b`, `gemini-2.5-pro`, `gpt-4o`).
-  - **Session & Conversation ID**: (e.g. `#a9f7d8`, `#01J8K9`) directly tied to real-time CPU/RAM spikes.
-  - **Workspace & Task**: The underlying repository project and active task (e.g. `pytest unit tests`, `swift build`).
-  - **One-Click Safe Session Termination**: Stop runaway agent loops without guessing cryptic PIDs.
+Only measured physical source groups are shown. On the Mac used for the screenshot, Apple IOHID and AppleSmartBattery exposed **3 source groups and 16 named points**: 14 PMU/SoC points, one battery sensor, and one NAND sensor. This count is machine-specific and is not a promise that every Mac exposes the same sensors.
 
-### 🐳 3. Docker Per-Container Resource Breakdown
-- **No More 8GB Mystery**: Instead of showing `com.docker.krun` as a single opaque 7GB+ memory block, MacDashboard breaks down each active container's individual RAM footprint, CPU%, and image tag.
+The fan section shows actual left/right RPM readback. Manual control requires the privileged helper; a write is considered successful only when the hardware readback confirms it. Removing the helper returns control to macOS.
 
-### 🍃 4. Monitoring Profiles & Eco Fan-Only Mode (< 0.05% CPU)
-- **⚡ Real-time (1s)**: Full-spectrum second-by-second analytics (~2-4% CPU).
-- **⚖️ Balanced (3s)**: Lightweight 3-second sampling (~0.5-1% CPU).
-- **🍃 Eco Fan-Only Mode**: Suspends all heavy process scans and Docker CLI polling while continuously driving closed-loop fan thermal regulation with negligible (< 0.05%) CPU overhead.
+<p align="center">
+  <img src="assets/screenshots/thermal_fan_control.png" alt="Named thermal sensor points and actual fan RPM readback" width="1100">
+</p>
 
-### ❄️ 4. Sensor-Based Closed-Loop Fan Control
-- **8 Dedicated Thermal Sensors**:
-  - 💻 **Apple Silicon SoC Package**: Whole-die aggregated temperature.
-  - 🖥️ **CPU Performance/Efficiency Cores**
-  - 🎮 **GPU Graphics Cluster**
-  - 🧠 **ANE Neural Engine (AI NPU)**
-  - ⚡ **Unified LPDDR5 RAM**
-  - 🖐️ **Palm Rest & Battery**: Combines physical battery telemetry with unibody aluminum thermal conduction.
-  - 🌪️ **Heatsink & Exhaust Fins**
-  - 💾 **NVMe SSD Storage**: Dynamic scaling based on real-time I/O throughput.
-- **-7°C Thermal Hysteresis & Anti-Hunting**:
-  - Ramp-up threshold: $\ge \text{Target} + 0.8^\circ\text{C}$.
-  - Spin-down / stop threshold: $< \text{Target} - 7.0^\circ\text{C}$.
-  - Eliminates rapid start-stop fan noise around critical temperature thresholds.
-- **Privileged Hardware Control**: Compatible with macOS SMC root helper protocol and manual RPM slider override (1,200 ~ 6,200 RPM).
+### Process inspector
 
-### ⚡ 5. Lag Detective (Instant Bottleneck Diagnosis)
-- Sub-second cross-correlation of CPU spikes, AI agent runaway sessions, memory exhaustion, swap thrashing, and thermal throttling with one-click remedies.
+PID, CPU, RAM, and start time come from macOS process data. Friendly names, owning app, workspace, and trigger source are derived from executable, current working directory, and parent-process evidence and are labelled accordingly. Common secret-shaped command-line arguments are redacted before display.
 
----
+<p align="center">
+  <img src="assets/screenshots/process_inspector.png" alt="Readable and filterable process inspector" width="1100">
+</p>
 
-## 📖 Usage Guide
+## Data boundaries at a glance
 
-### 1. Download & Installation
-1. Download **`MacDashboard-v1.0.0-macOS.dmg`** from [Releases](https://github.com/PeterTing/mac-tool-kit/releases/latest).
-2. Open the DMG and drag **`MacDashboard`** into your **`Applications`** folder.
-3. Launch `MacDashboard` from Applications or Spotlight.
+| Area | Primary evidence | Important boundary |
+| --- | --- | --- |
+| CPU / process | Mach and macOS process counters | Friendly attribution may be derived |
+| Memory | Host VM statistics | Dashboard pressure is derived; no fake purge |
+| Disk / network | Filesystem and interface counters | Storage categories are successful-scan lower bounds |
+| Docker | Docker CLI readback | No estimated data when Docker is unavailable; no volume prune action |
+| Temperature | Named Apple IOHID / AppleSmartBattery points | Availability and point counts vary by hardware |
+| Fans | SMC helper actual RPM readback | Manual writes require authorization and readback |
+| AI sessions | Codex / Claude / Antigravity local provider records plus process evidence | Non-Codex live state can be inferred, not provider-authoritative |
+| AI cost | Recognized model + provider-reported tokens + versioned rate table | API-equivalent estimate only; never actual billing |
 
-### 2. Enabling Hardware Fan Control (SMC Privilege)
-1. Navigate to the **Thermal & Fan** tab in the sidebar.
-2. Click **Enable Hardware Fan Control (Requires Authorization)**.
-3. Enter your macOS administrator password to authorize the lightweight privileged helper tool.
-4. You can now select custom thermal profiles or manually lock fan speeds.
-5. Click **Uninstall Privileged Helper** anytime to instantly restore default Apple auto-thermal control.
+## Installation
 
-### 3. Targeting Palm Rest Cooling
-1. Under **Component Temperatures**, click the **Palm Rest & Battery** card.
-2. Select **Balanced Cooling (Target ≤ 34°C)**.
-3. When the palm rest exceeds 34°C during intense typing, fans actively spin up to cool the metal chassis back to a comfortable zone!
+1. Download `MacDashboard-v1.3.0-macOS.dmg` or the ZIP from the [latest release](https://github.com/PeterTing/mac-tool-kit/releases/latest).
+2. Drag `MacDashboard.app` to Applications.
+3. The downloadable app is ad-hoc signed and is not Apple-notarized. On first launch, macOS may require **System Settings → Privacy & Security → Open Anyway**.
+4. Fan readback works without enabling manual mode. Install the privileged fan helper only if you want to change RPM; it can be removed from the Thermal & Fan page.
 
----
+## Build from source
 
-## 🛠️ Building from Source
+Requirements: macOS 14 or later and an Apple Swift 5.9+ toolchain.
 
 ```bash
-# 1. Clone the repository
 git clone https://github.com/PeterTing/mac-tool-kit.git
 cd mac-tool-kit
 
-# 2. Run test suite (10/10 tests)
-make test
+# Run the native test suite
+swift test --enable-code-coverage
 
-# 3. Build Release App to /Applications
+# Build the release application bundle
 make release
 
-# 4. Generate distributable DMG and ZIP packages
+# Build versioned DMG and ZIP artifacts in dist/
 make dmg
-# Artifacts are generated in dist/ directory
 ```
 
----
+The release version is read from [`VERSION`](VERSION) by both packaging scripts so the app bundle, DMG, ZIP, tag, and release notes stay aligned.
 
-## 🤝 Contributing
+## Release notes
 
-Contributions are warmly welcomed! Please check out [**CONTRIBUTING.md**](CONTRIBUTING.md) for branch naming conventions, Conventional Commits, and Swift 6 Strict Concurrency guidelines.
+See [MacDashboard v1.3.0 release notes](docs/releases/v1.3.0.md) for the verified changes, artifact checksums, known limits, and rollback instructions. Older releases remain available on the [GitHub Releases page](https://github.com/PeterTing/mac-tool-kit/releases).
 
----
+## Contributing
 
-## 🐛 Issues & Feedback
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for repository conventions and run the native test suite before opening a pull request.
 
-Found a bug or have an idea for a new feature?
-- 🐞 **[Submit a Bug Report](https://github.com/PeterTing/mac-tool-kit/issues/new?template=bug_report.md)**
-- 💡 **[Request a New Feature](https://github.com/PeterTing/mac-tool-kit/issues/new?template=feature_request.md)**
+## License
 
----
-
-## 📜 License
-
-This project is licensed under the [MIT License](LICENSE).
+MacDashboard is available under the [MIT License](LICENSE).

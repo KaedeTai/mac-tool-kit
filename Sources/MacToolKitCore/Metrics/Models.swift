@@ -9,8 +9,9 @@ public struct CoreUsage: Identifiable, Sendable {
     public let idle: Double
     public let totalUsage: Double
     public let isPerformanceCore: Bool
+    public let coreTypeName: String
 
-    public init(id: Int, coreNumber: Int, user: Double, system: Double, idle: Double, totalUsage: Double, isPerformanceCore: Bool = true) {
+    public init(id: Int, coreNumber: Int, user: Double, system: Double, idle: Double, totalUsage: Double, isPerformanceCore: Bool = true, coreTypeName: String? = nil) {
         self.id = id
         self.coreNumber = coreNumber
         self.user = user
@@ -18,6 +19,7 @@ public struct CoreUsage: Identifiable, Sendable {
         self.idle = idle
         self.totalUsage = totalUsage
         self.isPerformanceCore = isPerformanceCore
+        self.coreTypeName = coreTypeName ?? (isPerformanceCore ? "Performance" : "Efficiency")
     }
 }
 
@@ -254,9 +256,9 @@ public struct DockerContainerInfo: Identifiable, Sendable {
         name: String,
         image: String,
         cpuPercentage: Double = 0,
-        memoryUsage: String = "0 MB",
+        memoryUsage: String = "不可取得",
         memoryPercentage: Double = 0,
-        status: String = "running",
+        status: String = "不可取得",
         runningFor: String = "",
         command: String = ""
     ) {
@@ -337,14 +339,14 @@ public struct BatteryThermalSnapshot: Sendable {
     public let hasBattery: Bool
     public let isCharging: Bool
     public let isACConnected: Bool
-    public let batteryPercentage: Int
-    public let maxCapacity: Int
-    public let designCapacity: Int
-    public let cycleCount: Int
-    public let healthPercentage: Double
-    public let batteryTemperatureCelsius: Double
-    public let powerWattage: Double
-    public let timeRemainingMinutes: Int
+    public let batteryPercentage: Int?
+    public let maxCapacity: Int?
+    public let designCapacity: Int?
+    public let cycleCount: Int?
+    public let healthPercentage: Double?
+    public let batteryTemperatureCelsius: Double?
+    public let powerWattage: Double?
+    public let timeRemainingMinutes: Int?
     public let thermalState: SystemThermalState
     public let timestamp: Date
 
@@ -352,14 +354,14 @@ public struct BatteryThermalSnapshot: Sendable {
         hasBattery: Bool = false,
         isCharging: Bool = false,
         isACConnected: Bool = true,
-        batteryPercentage: Int = 100,
-        maxCapacity: Int = 0,
-        designCapacity: Int = 0,
-        cycleCount: Int = 0,
-        healthPercentage: Double = 100,
-        batteryTemperatureCelsius: Double = 30.0,
-        powerWattage: Double = 0,
-        timeRemainingMinutes: Int = -1,
+        batteryPercentage: Int? = nil,
+        maxCapacity: Int? = nil,
+        designCapacity: Int? = nil,
+        cycleCount: Int? = nil,
+        healthPercentage: Double? = nil,
+        batteryTemperatureCelsius: Double? = nil,
+        powerWattage: Double? = nil,
+        timeRemainingMinutes: Int? = nil,
         thermalState: SystemThermalState = .nominal,
         timestamp: Date = Date()
     ) {

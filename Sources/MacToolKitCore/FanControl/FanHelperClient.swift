@@ -1,68 +1,183 @@
 import Foundation
-import XPC
+
+public enum FanWriteOutcome {
+    public static func allSucceeded(_ results: [Bool]) -> Bool {
+        !results.isEmpty && results.allSatisfy { $0 }
+    }
+}
+
+public enum FanHelperSocketTrust: Equatable, Sendable {
+    case trusted
+    case missing
+    case unsafe(String)
+
+    public static func evaluate(
+        mode: UInt32,
+        ownerUID: UInt32,
+        groupGID: UInt32
+    ) -> FanHelperSocketTrust {
+        guard mode & 0o170000 == 0o140000 else {
+            return .unsafe("Helper endpoint is not a UNIX socket")
+        }
+        guard ownerUID == 0 else {
+            return .unsafe("Socket owner must be root")
+        }
+        guard groupGID == 80 else {
+            return .unsafe("Socket group must be admin")
+        }
+        guard mode & 0o777 == 0o660 else {
+            return .unsafe("Socket permissions must be exactly 0660")
+        }
+        return .trusted
+    }
+}
+
+public enum FanHelperCapability: Equatable, Sendable {
+    case unreachable
+    case reachableWithoutReadback
+    case ready(fanCount: Int)
+
+    public var hasVerifiedFanReadback: Bool {
+        if case .ready = self { return true }
+        return false
+    }
+
+    public var localizedDescription: String {
+        switch self {
+        case .unreachable:
+            return "讀回助手未連線"
+        case .reachableWithoutReadback:
+            return "讀回助手已啟動，但無法取得風扇硬體資料"
+        case .ready(let fanCount):
+            return "已驗證 \(fanCount) 個風扇的實際 RPM 與硬體範圍"
+        }
+    }
+}
+
+public enum FanHelperProtocolParser {
+    public static func capability(
+        pingSucceeded: Bool,
+        fanResponse: [String: Any]?
+    ) -> FanHelperCapability {
+        guard pingSucceeded else { return .unreachable }
+        guard let fans = fanStatuses(from: fanResponse) else {
+            return .reachableWithoutReadback
+        }
+        return .ready(fanCount: fans.count)
+    }
+
+    public static func fanStatuses(
+        from response: [String: Any]?,
+        currentMode: FanMode = .automatic
+    ) -> [FanStatus]? {
+        guard let response,
+              response["success"] as? Bool == true,
+              let rawFans = response["fans"] as? [[String: Any]],
+              (1...16).contains(rawFans.count) else {
+            return nil
+        }
+
+        var seenIndexes = Set<Int>()
+        var fans: [FanStatus] = []
+        for raw in rawFans {
+            guard let index = integer(raw["index"]), (0..<16).contains(index),
+                  seenIndexes.insert(index).inserted,
+                  let actualRPM = integer(raw["actualRPM"]), (0...100_000).contains(actualRPM),
+                  let minRPM = integer(raw["minRPM"]), (1...100_000).contains(minRPM),
+                  let maxRPM = integer(raw["maxRPM"]), (minRPM...100_000).contains(maxRPM),
+                  let targetRPM = integer(raw["targetRPM"]), (0...100_000).contains(targetRPM),
+                  let isManual = raw["isManual"] as? Bool else {
+                return nil
+            }
+
+            let rawName = raw["name"] as? String
+            let name = sanitizedFanName(rawName, fallbackIndex: index)
+            let mode: FanMode = isManual
+                ? (currentMode == .automatic ? .custom(rpm: targetRPM) : currentMode)
+                : .automatic
+            fans.append(FanStatus(
+                fanIndex: index,
+                name: name,
+                currentRPM: actualRPM,
+                minRPM: minRPM,
+                maxRPM: maxRPM,
+                targetRPM: targetRPM,
+                mode: mode
+            ))
+        }
+        return fans.sorted { $0.fanIndex < $1.fanIndex }
+    }
+
+    public static func temperatureSamples(from response: [String: Any]?) -> [SMCTemperatureSample]? {
+        guard let response,
+              response["success"] as? Bool == true,
+              let rawSensors = response["sensors"] as? [[String: Any]],
+              (1...512).contains(rawSensors.count) else {
+            return nil
+        }
+
+        var seenKeys = Set<String>()
+        var samples: [SMCTemperatureSample] = []
+        for raw in rawSensors {
+            guard let key = raw["key"] as? String,
+                  key.utf8.count == 4,
+                  ["Tp", "Tg", "Tm"].contains(String(key.prefix(2))),
+                  seenKeys.insert(key).inserted,
+                  let value = finiteNumber(raw["value"]),
+                  value > 0, value <= 110 else {
+                return nil
+            }
+            samples.append(SMCTemperatureSample(key: key, valueCelsius: value))
+        }
+        return samples
+    }
+
+    private static func integer(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        guard double.isFinite, double.rounded() == double,
+              double >= Double(Int.min), double <= Double(Int.max) else { return nil }
+        return Int(double)
+    }
+
+    private static func finiteNumber(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let double = number.doubleValue
+        return double.isFinite ? double : nil
+    }
+
+    private static func sanitizedFanName(_ raw: String?, fallbackIndex: Int) -> String {
+        guard let raw else { return "風扇 \(fallbackIndex + 1)" }
+        let cleaned = raw.unicodeScalars
+            .filter { !CharacterSet.controlCharacters.contains($0) }
+            .prefix(64)
+            .map(String.init)
+            .joined()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleaned.isEmpty ? "風扇 \(fallbackIndex + 1)" : cleaned
+    }
+}
 
 public final class FanHelperClient: Sendable {
     public static let shared = FanHelperClient()
     private let socketPath = "/var/run/macdashboard_fanhelper.sock"
-    private let smcWriteMachService = "com.crystalidea.macsfancontrol.smcwrite"
 
     private init() {}
 
-    // MARK: - XPC SMCWrite Integration
-
-    private func sendSMCWriteCommand(dict: [String: String]) async -> (success: Bool, message: String) {
-        return await withCheckedContinuation { cont in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let conn = xpc_connection_create_mach_service(self.smcWriteMachService, nil, 0)
-                xpc_connection_set_event_handler(conn) { _ in }
-                xpc_connection_resume(conn)
-
-                let msg = xpc_dictionary_create(nil, nil, 0)
-                for (k, v) in dict {
-                    xpc_dictionary_set_string(msg, k, v)
-                }
-
-                xpc_connection_send_message_with_reply(conn, msg, nil) { reply in
-                    if let str = xpc_dictionary_get_string(reply, "msg") {
-                        let respStr = String(cString: str)
-                        let isOk = respStr.contains("OK")
-                        cont.resume(returning: (isOk, respStr))
-                    } else {
-                        cont.resume(returning: (false, "No reply from smcwrite"))
-                    }
-                }
-            }
+    public func socketTrustStatus() -> FanHelperSocketTrust {
+        var metadata = stat()
+        guard lstat(socketPath, &metadata) == 0 else {
+            return errno == ENOENT
+                ? .missing
+                : .unsafe("Unable to inspect helper socket metadata")
         }
-    }
-
-    private func writeFanSpeedViaSMCWrite(fanIndex: Int, rpm: Int) async -> Bool {
-        _ = await sendSMCWriteCommand(dict: ["command": "open"])
-
-        let modeKey = "F\(fanIndex)md"
-        let targetKey = "F\(fanIndex)Tg"
-
-        // 1. Set manual mode
-        let r1 = await sendSMCWriteCommand(dict: ["command": "write", "key": modeKey, "value": "01"])
-
-        // 2. Set target float32 in hex
-        let val = Float32(rpm)
-        var hexStr = ""
-        withUnsafeBytes(of: val) { raw in
-            for b in raw { hexStr += String(format: "%02x", b) }
-        }
-        let r2 = await sendSMCWriteCommand(dict: ["command": "write", "key": targetKey, "value": hexStr])
-
-        _ = await sendSMCWriteCommand(dict: ["command": "close"])
-
-        return r1.success || r2.success
-    }
-
-    private func writeFanAutoViaSMCWrite(fanIndex: Int) async -> Bool {
-        _ = await sendSMCWriteCommand(dict: ["command": "open"])
-        let modeKey = "F\(fanIndex)md"
-        let r1 = await sendSMCWriteCommand(dict: ["command": "write", "key": modeKey, "value": "00"])
-        _ = await sendSMCWriteCommand(dict: ["command": "close"])
-        return r1.success
+        return FanHelperSocketTrust.evaluate(
+            mode: UInt32(metadata.st_mode),
+            ownerUID: metadata.st_uid,
+            groupGID: metadata.st_gid
+        )
     }
 
     // MARK: - UNIX Domain Socket Server Integration
@@ -70,7 +185,7 @@ public final class FanHelperClient: Sendable {
     private func sendSocketCommand(_ dict: [String: Any]) async -> [String: Any]? {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                guard FileManager.default.fileExists(atPath: self.socketPath) else {
+                guard self.socketTrustStatus() == .trusted else {
                     continuation.resume(returning: nil)
                     return
                 }
@@ -114,38 +229,42 @@ public final class FanHelperClient: Sendable {
                     return
                 }
 
-                let written = jsonData.withUnsafeBytes { raw in
-                    write(fd, raw.baseAddress, jsonData.count)
+                var bytesWritten = 0
+                let writeSucceeded = jsonData.withUnsafeBytes { raw -> Bool in
+                    guard let base = raw.baseAddress else { return false }
+                    while bytesWritten < jsonData.count {
+                        let result = write(fd, base.advanced(by: bytesWritten), jsonData.count - bytesWritten)
+                        guard result > 0 else { return false }
+                        bytesWritten += result
+                    }
+                    return true
                 }
 
-                guard written > 0 else {
+                guard writeSucceeded else {
                     continuation.resume(returning: nil)
                     return
                 }
 
-                var buffer = [UInt8](repeating: 0, count: 8192)
-                let bytesRead = read(fd, &buffer, buffer.count - 1)
-                guard bytesRead > 0 else {
+                var responseData = Data()
+                var buffer = [UInt8](repeating: 0, count: 4_096)
+                while responseData.count < 65_536 {
+                    let bytesRead = read(fd, &buffer, buffer.count)
+                    guard bytesRead > 0 else { break }
+                    responseData.append(contentsOf: buffer[0..<bytesRead])
+                    if buffer[0..<bytesRead].contains(0x0A) { break }
+                }
+                guard !responseData.isEmpty, responseData.count <= 65_536 else {
                     continuation.resume(returning: nil)
                     return
                 }
 
-                let respData = Data(buffer[0..<bytesRead])
-                let resJson = try? JSONSerialization.jsonObject(with: respData) as? [String: Any]
+                let resJson = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any]
                 continuation.resume(returning: resJson)
             }
         }
     }
 
     public func ping() async -> Bool {
-        // Check XPC service first
-        let openRes = await sendSMCWriteCommand(dict: ["command": "open"])
-        if openRes.success {
-            _ = await sendSMCWriteCommand(dict: ["command": "close"])
-            return true
-        }
-
-        // Fallback to socket
         guard let resp = await sendSocketCommand(["cmd": "ping"]),
               let success = resp["success"] as? Bool, success else {
             return false
@@ -153,115 +272,61 @@ public final class FanHelperClient: Sendable {
         return true
     }
 
+    public func probeCapability() async -> FanHelperCapability {
+        let pingSucceeded = await ping()
+        let fanResponse = pingSucceeded ? await sendSocketCommand(["cmd": "get_fans"]) : nil
+        return FanHelperProtocolParser.capability(
+            pingSucceeded: pingSucceeded,
+            fanResponse: fanResponse
+        )
+    }
+
     public func getFanStatuses(currentMode: FanMode = .automatic) async -> [FanStatus]? {
-        if let resp = await sendSocketCommand(["cmd": "get_fans"]),
-           let fanArray = resp["fans"] as? [[String: Any]], !fanArray.isEmpty {
-            var results = [FanStatus]()
-            for item in fanArray {
-                let index = item["index"] as? Int ?? 0
-                let name = item["name"] as? String ?? "風扇 \(index + 1)"
-                var actualRPM = item["actualRPM"] as? Int ?? 0
-                let minRPM = item["minRPM"] as? Int ?? 1200
-                let maxRPM = item["maxRPM"] as? Int ?? 6200
-                let isManual = item["isManual"] as? Bool ?? (currentMode != .automatic)
-
-                var targetRPM = item["targetRPM"] as? Int ?? actualRPM
-                switch currentMode {
-                case .automatic:
-                    targetRPM = 0
-                case .quiet:
-                    targetRPM = 1400
-                case .balanced:
-                    targetRPM = 2800
-                case .maxCooling:
-                    targetRPM = 6000
-                case .custom(let rpm):
-                    targetRPM = rpm
-                }
-
-                if targetRPM > 0 && actualRPM == 0 {
-                    actualRPM = targetRPM
-                }
-
-                let fanMode: FanMode = isManual ? (currentMode == .automatic ? .custom(rpm: targetRPM) : currentMode) : .automatic
-
-                results.append(FanStatus(
-                    fanIndex: index,
-                    name: name,
-                    currentRPM: actualRPM,
-                    minRPM: minRPM,
-                    maxRPM: maxRPM,
-                    targetRPM: targetRPM,
-                    mode: fanMode
-                ))
-            }
-            return results
-        }
-
-        // Default dual fans profile for Apple Silicon MacBook Pro
-        var target = 0
-        switch currentMode {
-        case .automatic:
-            target = 0
-        case .quiet:
-            target = 1400
-        case .balanced:
-            target = 2800
-        case .maxCooling:
-            target = 6000
-        case .custom(let rpm):
-            target = rpm
-        }
-
-        let f1 = FanStatus(
-            fanIndex: 0,
-            name: "左側風扇 (Fan 1)",
-            currentRPM: target,
-            minRPM: 1200,
-            maxRPM: 6200,
-            targetRPM: target,
-            mode: currentMode
+        FanHelperProtocolParser.fanStatuses(
+            from: await sendSocketCommand(["cmd": "get_fans"]),
+            currentMode: currentMode
         )
+    }
 
-        let f2 = FanStatus(
-            fanIndex: 1,
-            name: "右側風扇 (Fan 2)",
-            currentRPM: target,
-            minRPM: 1200,
-            maxRPM: 6200,
-            targetRPM: target,
-            mode: currentMode
+    public func getTemperatureSamples() async -> [SMCTemperatureSample]? {
+        FanHelperProtocolParser.temperatureSamples(
+            from: await sendSocketCommand(["cmd": "get_temperature_sensors"])
         )
-
-        return [f1, f2]
     }
 
     public func setFanSpeed(fanIndex: Int, rpm: Int) async -> Bool {
-        let xpcSuccess = await writeFanSpeedViaSMCWrite(fanIndex: fanIndex, rpm: rpm)
-        if xpcSuccess { return true }
-
         guard let resp = await sendSocketCommand(["cmd": "set_fan_target", "fan": fanIndex, "rpm": rpm]),
-              let success = resp["success"] as? Bool else {
+              resp["success"] as? Bool == true,
+              let targetReadback = resp["targetReadback"] as? Int else {
             return false
         }
-        return success
+        return abs(targetReadback - rpm) <= 1
     }
 
     public func setFanAuto(fanIndex: Int) async -> Bool {
-        let xpcSuccess = await writeFanAutoViaSMCWrite(fanIndex: fanIndex)
-        if xpcSuccess { return true }
-
         guard let resp = await sendSocketCommand(["cmd": "set_fan_auto", "fan": fanIndex]),
-              let success = resp["success"] as? Bool else {
+              resp["success"] as? Bool == true,
+              let modeReadback = resp["modeReadback"] as? Int else {
             return false
         }
-        return success
+        return modeReadback == 0 || modeReadback == 3
     }
 
     public func setAllAuto() async -> Bool {
-        let ok0 = await setFanAuto(fanIndex: 0)
-        let ok1 = await setFanAuto(fanIndex: 1)
-        _ = await sendSocketCommand(["cmd": "set_all_auto"])
-        return ok0 || ok1
+        guard let fans = await getFanStatuses(), !fans.isEmpty else { return false }
+        var results: [Bool] = []
+        for fan in fans {
+            results.append(await setFanAuto(fanIndex: fan.fanIndex))
+        }
+        return FanWriteOutcome.allSucceeded(results)
+    }
+
+    public func setAllFanSpeeds(rpm: Int) async -> Bool {
+        guard let fans = await getFanStatuses(), !fans.isEmpty else { return false }
+        var results: [Bool] = []
+        for fan in fans {
+            results.append(await setFanSpeed(fanIndex: fan.fanIndex, rpm: rpm))
+        }
+        return FanWriteOutcome.allSucceeded(results)
     }
 }

@@ -1,0 +1,453 @@
+{
+  "$schema": "./schemas/prd-tracker.schema.json",
+  "schema_version": "1.0",
+  "project": "mac-tool-kit",
+  "mode": "local-only",
+  "source_of_truth": "repo-json",
+  "updated_at": "2026-08-29T22:10:00+08:00",
+  "acceptance_policy": {
+    "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
+    "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
+    "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
+  },
+  "summary": {
+    "overall_status": "implementation-complete-verification-blocked",
+    "verdict": "automated-and-native-ui-pass-coverage-blocked",
+    "prd_items": 5,
+    "verified": 0,
+    "partial": 5,
+    "planned": 0,
+    "blocked": 1,
+    "not_covered": 0,
+    "test_cases": 17,
+    "automated_passed": 14,
+    "automated_failed": 1,
+    "manual_not_covered": 2,
+    "coverage_lines_percent": 71.04
+  },
+  "prd_items": [
+    {
+      "id": "PRD-DATA-TRUTH",
+      "title": "Dashboard data truth audit",
+      "status": "partial",
+      "priority": "P0",
+      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. Release status remains blocked only by coverage and unexecuted destructive-action paths.",
+      "source_refs": [
+        "Sources/MacToolKitCore",
+        "Sources/MacDashboardApp",
+        "/tmp/mac-dashboard-qa-2026-08-28",
+        "/tmp/mac-dashboard-qa-2026-08-29"
+      ],
+      "acceptance_criteria": [
+        "Every displayed number has a named source and freshness timestamp.",
+        "Estimated or inferred values are visibly labeled and excluded from factual totals.",
+        "Unavailable measurements never masquerade as facts: analytical grids omit empty fields, while safety-critical controls expose an explicit reason and fail closed.",
+        "All eight tabs pass automated and manual checks."
+      ],
+      "test_case_counts": { "total": 10, "passed": 9, "failed": 1, "not_covered": 0 },
+      "test_cases": [
+        {
+          "id": "TC-OVERVIEW-001",
+          "status": "verified",
+          "use_cases": ["Inspect system overview"],
+          "types": ["browser", "visual", "integration"],
+          "role": "Mac operator",
+          "fixture": "Running /Applications/MacDashboard.app after 2026-08-28 boot",
+          "steps": ["Open System Overview", "Compare CPU, RAM, disk, network, Docker, thermal, and fan values with their native sources"],
+          "expected": "All summary values match their underlying sources and expose provenance.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Removed the 1800 RPM fallback; unavailable fan readback now displays unavailable.", "Docker stats CPU/RAM is joined by exact container ID with docker ps image, Up/healthy status, runningFor and redacted command.", "The installed System Overview was inspected at 21:44; Docker rows showed real images and Up/healthy states, while fan RPM was labeled actual readback."]
+        },
+        {
+          "id": "TC-AI-001",
+          "status": "verified",
+          "use_cases": ["Inspect active AI tasks", "Inspect project to main session to subagent hierarchy", "Inspect usage and cost"],
+          "types": ["browser", "file", "integration", "hostile-input"],
+          "role": "Developer",
+          "fixture": "Three active Codex tasks plus local Claude and Antigravity logs",
+          "steps": ["Compare Dashboard active sessions with Codex task status", "Inspect parser formulas", "Compare local rollout metadata and token counts", "Inspect parent-child metadata"],
+          "expected": "Exact active count, title, cwd, provider-reported tokens, and explicit parent relationship; no invented billing.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Codex rollout metadata supplies exact cwd, provider token total and explicit parent_thread_id; the read-only local turn database supplies the latest exact running state.", "Claude nested subagents use sessionId plus agentId; missing parents remain Unlinked.", "Claude and Antigravity runtime state is cross-checked from matching Mac processes, project CWD, and 30-second provider-log freshness.", "The UI removes actual billing and shows only official-rate API-equivalent estimates. Haiku 4.5 includes distinct cache-read, 5-minute cache-write and 1-hour cache-write rates; OpenAI cached input and cache writes are deducted from the full input subset before pricing.", "At 21:44 the installed Active view showed exactly three Codex inProgress sessions under mac-tool-kit #01a047b9, travian-tools #01a042a1 and hunterest #01a03d16; titles, paths and detail selection matched.", "At 23:44 Recent 24h hid 184 metadata-only provider records by default. Enabling the explicit activity-only toggle showed review-the-current-uncommitted-generic-lovelace as a real Inactive record with ID, path and timestamps, while model/token/cost rows were omitted instead of rendered as unavailable.", "At 00:22 the final installed History view showed 1,228 usage-bearing sessions as collapsed project rows; Hunterest expanded only the first 40 rows and exposed a load-more control for the remaining 405 main sessions. A real new-chat main session with two linked children was expanded and then fully collapsed, including its child paging control."]
+        },
+        {
+          "id": "TC-LAG-001",
+          "status": "verified",
+          "use_cases": ["Diagnose lag safely"],
+          "types": ["browser", "unit", "integration"],
+          "role": "Mac operator",
+          "fixture": "Dashboard process at 62.8 percent CPU and Docker at 7.7 GB",
+          "steps": ["Open Lag Diagnostic", "Compare health verdict with causes and remediation"],
+          "expected": "Verdict and remediation severity agree and destructive actions exclude the Dashboard itself.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Major causes cannot produce a Smooth verdict; the Dashboard process is excluded and destructive actions require confirmation.", "A normal 64 GiB memory state no longer turns a 4.9 GiB Docker process into a false Lag cause or termination recommendation.", "The installed Lag page at 21:44 showed Smooth 100 with no contradictory cause or action and explicitly said the rule set cannot exclude every lag source."]
+        },
+        {
+          "id": "TC-CPU-001",
+          "status": "verified",
+          "use_cases": ["Inspect CPU topology and load"],
+          "types": ["browser", "system"],
+          "role": "Mac operator",
+          "fixture": "Apple M5 Pro with 18 cores",
+          "steps": ["Open CPU tab", "Compare per-core labels with sysctl perf levels"],
+          "expected": "Core labels reflect the machine topology.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Mach tick load is measured; hw.perflevel groups are labeled as a derived sequential mapping rather than P/E guessing.", "The installed CPU page was inspected with 18 measured core loads and the topology disclosure visible."]
+        },
+        {
+          "id": "TC-MEMORY-001",
+          "status": "verified",
+          "use_cases": ["Inspect memory usage and pressure", "Understand reclaimable inactive pages"],
+          "types": ["browser", "system"],
+          "role": "Mac operator",
+          "fixture": "64 GB machine with normal operating state",
+          "steps": ["Open Memory tab", "Trace used, free, compressed, swap and pressure calculations"],
+          "expected": "Derived usage is labeled, inactive pages are explained as system-reclaimable, and no disk-cache command is presented as RAM cleanup.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Usage and pressure are labeled Dashboard-derived; free pages are not called available memory.", "The local purge(8) manual states it only empties disk buffer cache and does not affect anonymous memory, so it cannot clear VM inactive pages.", "All purge controls and Lag purge remediation were removed; the final installed RAM page explicitly labels inactive pages as automatically reclaimable by macOS. Evidence: /tmp/mac-dashboard-qa-2026-08-29/memory-no-purge-final.png."]
+        },
+        {
+          "id": "TC-DISK-NETWORK-001",
+          "status": "verified",
+          "use_cases": ["Inspect storage and network throughput"],
+          "types": ["browser", "system", "hostile-input"],
+          "role": "Mac operator",
+          "fixture": "en0 received more than 4 GiB since boot",
+          "steps": ["Open Disk and Network", "Compare disk capacity", "Exercise 32-bit counter boundary"],
+          "expected": "Disk units are explicit and network counters remain monotonic past 4 GiB.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Disk binary units are GiB/MiB.", "Network uses 64-bit NET_RT_IFLIST2 counters and labels cumulative scope as interface totals since boot.", "The installed Disk and Network page was inspected with current rates and since-boot cumulative scope visible."]
+        },
+        {
+          "id": "TC-THERMAL-FAN-001",
+          "status": "partial",
+          "use_cases": ["Inspect component temperatures", "Control fans safely"],
+          "types": ["browser", "system", "security"],
+          "role": "Mac operator",
+          "fixture": "Fan helper active; helper response available over local socket",
+          "steps": ["Open Thermal and Fan tab", "Compare component temperatures with implementation", "Read fan status from helper"],
+          "expected": "Only physical sensor readings drive safety actions; partial writes and unavailable RPM are reported honestly.",
+          "automated_status": "passed",
+          "manual_status": "pending",
+          "evidence": ["Root cause reproduced: the shipped AppleSMC payload was 76 bytes instead of the required 80 bytes, and read metadata was discarded before decoding.", "Installed helper 1.1.0 returned FNum=2 and both fans' measured RPM and hardware ranges.", "A read-only Apple IOHID probe returned named PMU tdie*, NAND CH* temp, and gas-gauge battery temperatures; raw SMC Tp/Tg/Tm keys are no longer attributed to CPU/GPU/RAM.", "At 21:45 the installed Fan page showed 14 named PMU samples at 60.7–64.8 C, NAND 36.0 C, AppleSmartBattery 35.7 C, and actual fan readbacks 3170/3436 RPM.", "At 23:44 the installed page rendered exactly three measured component groups backed by 16 readings: 14 named PMU points, one AppleSmartBattery temperature, and one NAND CH0 temperature. Unsupported component cards and the derived duplicate peak card were absent; unavailable battery power was omitted.", "At 18:07 the rebuilt installed app separately labeled 3 source groups and 16 named measured points, and its expanded disclosure displayed PMU tdie1 through PMU tdie14, AppleSmartBattery Temperature, and NAND CH0 temp with live values. Collapsing removed all point rows and expanding restored all three families. Evidence: /tmp/mac-dashboard-qa-2026-08-29/thermal-all-named-points.jpeg.", "Socket trust remains root:admin 0660 and invalid fan indexes or RPM outside measured hardware bounds fail closed. Manual fan writes were not executed."]
+        },
+        {
+          "id": "TC-PROCESS-001",
+          "status": "partial",
+          "use_cases": ["Inspect and manage processes"],
+          "types": ["browser", "system", "privacy"],
+          "role": "Mac operator",
+          "fixture": "Claude, Codex, Docker and desktop applications running",
+          "steps": ["Open Process Manager", "Compare labels, cwd, models and commands with live processes"],
+          "expected": "Process metrics are factual; inferred ownership is labeled; command text is redacted.",
+          "automated_status": "passed",
+          "manual_status": "pending",
+          "evidence": ["Claude Desktop is no longer classified as Claude Code and hard-coded model labels were removed.", "Worktrees normalize to the parent project; runtime/plugin directories remain unlinked.", "Common command-line secrets, bearer tokens and URL credentials are redacted.", "The installed Process Manager was inspected with 941 readable processes, provenance text and redacted command disclosure; termination actions were not executed."]
+        },
+        {
+          "id": "TC-TEST-SUITE-001",
+          "status": "partial",
+          "use_cases": ["Run package regression suite"],
+          "types": ["unit", "integration"],
+          "role": "Developer",
+          "fixture": "Current main working tree",
+          "steps": ["Run swift test --enable-code-coverage"],
+          "expected": "All tests pass and core logic coverage exceeds 95 percent.",
+          "automated_status": "failed",
+          "manual_status": "not_required",
+          "evidence": ["71 coverage-enabled tests passed with 0 failures at 22:09.", "Combined source line coverage is 71.04 percent (4,704 / 6,622 lines), below the 95 percent release target.", "Permanent AI history strips raw turn descriptions before every atomic write; a regression test proves this for current scans.", "Dedicated regressions prove that History starts collapsed, branches page in bounded 40-row batches, collapsed main sessions hide child paging controls, a selected Recent child reveals only its exact project/parent branch, permanent History has no timer refresh, disk-cache purge is not offered as RAM remediation, project-only processes cannot mark older-than-24-hour sessions Idle, thermal point counts do not collapse into summary-card counts, and disabling API estimates hides them from the selected-session evidence panel."]
+        },
+        {
+          "id": "TC-VISUAL-001",
+          "status": "verified",
+          "use_cases": ["Capture every tab for audit"],
+          "types": ["visual"],
+          "role": "QA reviewer",
+          "fixture": "Running app at 893 by 768 points",
+          "steps": ["Capture and inspect all eight tab screenshots"],
+          "expected": "Every tab has current visual evidence.",
+          "automated_status": "not_run",
+          "manual_status": "passed",
+          "evidence": ["All eight installed-app tabs were captured and visually inspected under /tmp/mac-dashboard-qa-2026-08-28.", "The final AI Active capture matched the three current Codex database inProgress threads and reconciled the selected detail pane.", "The final Overview capture showed Docker ps status/image metadata; the final Lag capture had no Smooth/action contradiction.", "The final Fan capture showed 14 named PMU samples, NAND and AppleSmartBattery temperatures, plus two actual fan RPM readbacks.", "Fresh 23:44 captures thermal-measured-only-2344.png, ai-activity-records-filtered-2344.png, and ai-activity-only-detail-2344.png were opened and visually inspected after reinstalling /Applications/MacDashboard.app.", "Fresh 00:22 captures ai-history-collapsed-final.png, ai-history-hunterest-expanded-final.png, ai-history-main-collapsed-final.png, and memory-no-purge-final.png were opened and visually inspected from the final installed app.", "The v1.3.0 README set contains eight direct 1440 x 1050 PNG captures in assets/screenshots. Every image was opened at original detail; no screenshot has clipped primary content or a broken layout."]
+        }
+      ],
+      "tasks": [
+        { "id": "TASK-AUDIT-001", "title": "Trace all displayed values to source", "status": "done" },
+        { "id": "TASK-AUDIT-002", "title": "Implement corrections", "status": "done" },
+        { "id": "TASK-RELEASE-130", "title": "Publish v1.3.0 with current Retina screenshots, README and evidence-based release notes", "status": "doing" }
+      ],
+      "gaps": [
+        "Process termination and manual fan writes were not executed against unrelated live workloads.",
+        "Combined source line coverage is 71.04 percent, below the repository 95 percent release target."
+      ]
+    },
+    {
+      "id": "PRD-AI-SESSION-MODEL",
+      "title": "Fact-based AI project and session model",
+      "status": "partial",
+      "priority": "P0",
+      "summary": "Implemented project folder to main session to subagent relationships backed by explicit provider identifiers. Every container level is independently collapsible and large branches page in bounded batches; metadata-only Recent/History records remain opt-in.",
+      "source_refs": ["docs/design-site/index.html#ai-model", "Sources/MacToolKitCore/AIAnalytics"],
+      "acceptance_criteria": [
+        "Active state comes from exact Codex turn status or matching provider process, project CWD, and recent transcript activity; otherwise the state is Idle or Inactive.",
+        "Project path is the exact cwd or an explicit user mapping; title keywords never choose a project.",
+        "Subagents require an explicit parent session identifier; otherwise they appear under Unlinked.",
+        "Provider-reported token fields remain separate from the API-equivalent standard-rate estimate; actual billed credits are not presented.",
+        "API-equivalent estimates require one exactly priced model and complete billable token buckets; unknown or ambiguous inputs fail closed, and project rollups disclose partial estimate coverage.",
+        "Records with only a real session ID/path/timestamp remain in the history index but are hidden from Recent/History usage analysis by default; enabling the activity-only filter omits nonexistent model/token/cost rows.",
+        "Today totals include only usage events that occurred today."
+      ],
+      "test_case_counts": { "total": 2, "passed": 2, "failed": 0, "not_covered": 0 },
+      "test_cases": [
+        {
+          "id": "TC-CODEX-SOURCE-001",
+          "status": "verified",
+          "use_cases": ["Read factual Codex task metadata and token usage"],
+          "types": ["file", "integration"],
+          "role": "Developer",
+          "fixture": "Three active Codex tasks",
+          "steps": ["Read app task status", "Read rollout session_meta", "Read latest token_count event"],
+          "expected": "IDs, titles, cwd, status and token totals align.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["The installed Active view showed three current Codex inProgress tasks with exact project cwd, title and cumulative token counts: mac-tool-kit #01a047b9, travian-tools #01a042a1 and hunterest #01a03d16."]
+        },
+        {
+          "id": "TC-HIERARCHY-001",
+          "status": "verified",
+          "use_cases": ["Nest subagents under their main session"],
+          "types": ["file", "integration"],
+          "role": "Developer",
+          "fixture": "Claude project containing a main JSONL and nested subagents directory",
+          "steps": ["Inspect nested path", "Compare sessionId and agentId", "Run current parser"],
+          "expected": "Each child resolves to its exact main session.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Nested Claude files are recursively scanned and linked only by explicit sessionId/agentId fields; the automated fixture passed.", "At 20:27 the installed Recent view exposed explicit hierarchy counts before expansion: ai-awesome had 1 main and 166 children, artogo-infra had 1 main and 136 children, ai-driven-company had 1 main and 2 children, and backend had 0 local main records plus 23 children whose parents were absent from the local index.", "Selecting Claude child #a9a64de4 displayed its provider parent #3b85a905; expanding the main row rendered the child list, and a manual refresh preserved the user's collapsed state.", "The previous Unlinked Claude Runtime bucket is now presented as Claude internal background work with 12 independent runtime records because those provider files explicitly report non-sidechain records under ~/.claude rather than project subagents. Evidence: /tmp/mac-dashboard-qa-2026-08-29/ai-session-hierarchy-final.png and /tmp/mac-dashboard-qa-2026-08-29/ai-session-children-final.png."]
+        }
+      ],
+      "tasks": [
+        { "id": "TASK-AI-001", "title": "Introduce provenance and relationship fields", "status": "done" },
+        { "id": "TASK-AI-002", "title": "Build provider adapters for Codex, Claude and Antigravity", "status": "done" },
+        { "id": "TASK-AI-003", "title": "Replace flat tree with nested project-session-agent UI", "status": "done" },
+        { "id": "TASK-AI-004", "title": "Add dated official-rate API-equivalent cost and remove actual-billing presentation", "status": "done" },
+        { "id": "TASK-AI-005", "title": "Separate metadata-only activity records from usage-analysis sessions", "status": "done" },
+        { "id": "TASK-AI-006", "title": "Add indexed collapsible hierarchy and bounded branch paging", "status": "done" },
+        { "id": "TASK-AI-007", "title": "Reveal selected Recent subagents and distinguish provider runtimes from project sessions", "status": "done" }
+      ],
+      "gaps": [
+        "Codex App tasks have exact local turn state; Claude and Antigravity only expose a derived process/CWD/freshness state in this implementation.",
+        "Antigravity logs do not establish billed token usage or reliable per-session model identity in the current implementation.",
+        "A task started with cwd /Users/peterting cannot be factually assigned to Hunterest from its title alone."
+      ]
+    },
+    {
+      "id": "PRD-AI-HISTORY",
+      "title": "Active, recent, and history lifecycle",
+      "status": "partial",
+      "priority": "P1",
+      "summary": "Implemented Active/Idle/Inactive, Recent 24h, and permanent History separation with an atomic Application Support index. Permanent History is manually refreshed, collapsed by default and batch-rendered; native History browsing is verified.",
+      "source_refs": ["docs/design-site/index.html#history"],
+      "acceptance_criteria": [
+        "Active means an exact Codex running state or a matching provider process and project CWD plus recent session-log activity.",
+        "Idle means the task is open but no work is executing.",
+        "Inactive tasks move to Recent immediately and to History after a configurable 24-hour default.",
+        "History is retained until the source log is deleted or the user chooses deletion; no silent parser-limit eviction.",
+        "Transcript span, active execution time, and last activity are separate fields."
+      ],
+      "test_case_counts": { "total": 1, "passed": 1, "failed": 0, "not_covered": 0 },
+      "test_cases": [
+        {
+          "id": "TC-HISTORY-001",
+          "status": "verified",
+          "use_cases": ["Browse and filter historical AI sessions"],
+          "types": ["browser", "db", "integration"],
+          "role": "Developer",
+          "fixture": "Provider logs spanning reboot and multiple days",
+          "steps": ["Complete a task", "Observe Recent", "Advance inactivity past 24 hours", "Search History by project and provider"],
+          "expected": "Lifecycle and retention match the declared policy without data loss.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Lifecycle boundary, permanent retention, active-state sanitization and explicit parent-link tests passed.", "Recent/History metadata-only records are retained permanently but default-hidden behind an explicit activity-only toggle; Active never applies this hiding rule.", "For the 6,244-record, 61-project installed History, final UI automation measured 1.490 seconds from click through accessibility capture while collapsed; Hunterest measured 1.376 seconds through the same path with 40 rows and a remaining-count load-more control. These timings include automation and capture overhead and are not pure render benchmarks.", "A real new-chat main session exposed two explicit children and then fully hid both children and the child paging control when collapsed.", "Project-level CWD evidence cannot label a session older than 24 hours Idle without an exact session identifier."]
+        }
+      ],
+      "tasks": [
+        { "id": "TASK-HISTORY-001", "title": "Approve lifecycle policy", "status": "done" },
+        { "id": "TASK-HISTORY-002", "title": "Add local normalized event store and migration", "status": "done" },
+        { "id": "TASK-HISTORY-003", "title": "Build Active, Recent and History views", "status": "done" },
+        { "id": "TASK-HISTORY-004", "title": "Collapse and batch permanent History without timer rescans", "status": "done" }
+      ],
+      "gaps": [
+        "The complete provider/tool/search filter matrix over all permanent History records was not manually exhausted.",
+        "History has no user deletion UI yet; retention is permanent by policy and file-backed."
+      ]
+    },
+    {
+      "id": "PRD-STORAGE-RECLAIM",
+      "title": "Measured storage composition and safe reclaim workflow",
+      "status": "partial",
+      "priority": "P0",
+      "summary": "Implemented a bounded, lower-bound storage composition scan, exact cleanup allow-list, impact-ranked opt-in confirmation flow, Docker-specific guidance, and responsive Process Manager columns. Temporary-fixture cleanup and the installed selection flow pass; a real-file destructive run and automated screenshot regression remain intentionally uncovered.",
+      "source_refs": ["docs/plans/2026-08-29-storage-cleanup-ui.md", "Sources/MacToolKitCore/Metrics", "Sources/MacDashboardApp/Views"],
+      "acceptance_criteria": [
+        "Named storage categories are measured from disclosed paths; unscanned and system space remains explicitly unclassified.",
+        "Cleanup candidates expose measured size, impact, consequence, and exact management method before selection.",
+        "Cleanup rejects paths outside an exact allow-list and requires a non-empty selection plus destructive confirmation.",
+        "The cleanup sheet exposes a pointer-reachable footer Cancel action and the standard Escape shortcut without invoking cleanup.",
+        "Docker volumes and active containers are never included in ordinary file cleanup; Docker-reported reclaimable storage has separate instructions.",
+        "Cleanup reports a fresh selected-item size decrease and volume free-space delta instead of promising the pre-scan estimate.",
+        "The Process Manager toolbar and all eight tabs remain readable at the installed app minimum viewport."
+      ],
+      "test_case_counts": { "total": 2, "passed": 1, "failed": 0, "not_covered": 1 },
+      "test_cases": [
+        {
+          "id": "TC-STORAGE-001",
+          "status": "verified",
+          "use_cases": ["Inspect measured file composition", "Select safe reclaim candidates", "Understand Docker storage management"],
+          "types": ["unit", "integration", "visual"],
+          "role": "Mac operator",
+          "fixture": "Temporary category roots plus the current Mac home and Docker read-only storage report",
+          "steps": ["Scan named categories", "Compare measured totals with fixture files", "Attempt an out-of-allow-list cleanup", "Open the selection sheet", "Cancel by pointer and by Escape", "Select an allowed cache", "Confirm and rescan"],
+          "expected": "Measured totals are factual, unsafe paths fail closed, selected cleanup is confirmed, and the after-state is remeasured.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": [
+            "Six StorageManagementTests pass: named-path measurement, non-negative unclassified math, Docker volume separation, exact allow-list rejection, empty-selection no-op, and bounded partial scans.",
+            "The installed scan completed within the 10.76-second observation window and showed 49.5 GiB of successfully read named categories against 525.9 GiB used, with 476.3 GiB explicitly unclassified and eight partial categories; these are a live lower-bound snapshot, not a full macOS Storage index.",
+            "The installed cleanup sheet started with no selection, exposed each path, impact and consequence, and required a second destructive confirmation after selecting only npm cache. The confirmation was cancelled; no user files were deleted.",
+            "Docker-reported Images, Containers, Volumes and Build Cache remain separate. Volumes are labeled high impact and no volume-prune action is provided. Evidence: /tmp/mac-dashboard-qa-2026-08-29/final-disk-composition.png.",
+            "The title-bar-adjacent Cancel control was moved into the fixed footer with a 72-point minimum button width and the standard Escape shortcut. The installed app dismissed the sheet through a pointer click at screenshot-local coordinate (445, 492), then reopened and dismissed it with Escape; no cleanup confirmation was invoked. Evidence: /tmp/mac-dashboard-qa-2026-08-29/storage-cleanup-cancel-fixed.png."
+          ]
+        },
+        {
+          "id": "TC-RESPONSIVE-UI-001",
+          "status": "partial",
+          "use_cases": ["Read every Dashboard tab at the minimum window size", "Filter and sort processes without toolbar overflow"],
+          "types": ["visual", "browser"],
+          "role": "Mac operator",
+          "fixture": "Installed /Applications/MacDashboard.app at its minimum window size",
+          "steps": ["Capture all eight tabs", "Inspect clipped, vertical, overlapping, truncated, and inaccessible controls", "Exercise Process Manager search and sort"],
+          "expected": "All primary labels and actions are readable; Process Manager controls reflow without vertical text or overlap.",
+          "automated_status": "not_run",
+          "manual_status": "passed",
+          "evidence": [
+            "All eight installed-app tabs were captured and visually inspected at the 1000-point minimum width under /tmp/mac-dashboard-qa-2026-08-29/min-ui-1.png through min-ui-8.png.",
+            "Process Manager compact mode hides secondary Category, PID and Uptime columns while retaining name and context, CPU, RAM and actions; row detail still contains omitted metadata. Evidence: /tmp/mac-dashboard-qa-2026-08-29/final-process-min-window.png.",
+            "CPU core badges, RAM legend, thermal source names, storage cards, AI hierarchy, Lag result and Overview cards remained readable without overlapping or vertical labels. Automated screenshot regression is not implemented."
+          ]
+        }
+      ],
+      "tasks": [
+        { "id": "TASK-STORAGE-001", "title": "Add measured storage and cleanup contracts", "status": "done" },
+        { "id": "TASK-STORAGE-002", "title": "Build impact-ranked selection and confirmation UI", "status": "done" },
+        { "id": "TASK-STORAGE-003", "title": "Move cleanup cancellation out of the sheet drag region and verify pointer plus Escape dismissal", "status": "done" },
+        { "id": "TASK-UI-001", "title": "Repair Process Manager overflow and audit all tab layouts", "status": "done" }
+      ],
+      "gaps": [
+        "No cleanup has been executed against the user's real files; deletion behavior is verified with temporary fixtures and the installed-app confirmation UI only.",
+        "The composition view is a bounded lower-bound scan of disclosed user paths, not Apple's complete Storage index; unread, timed-out, system and other-user bytes stay unclassified.",
+        "Docker volume cleanup remains intentionally excluded because it can delete persistent databases.",
+        "Automated screenshot regression is not implemented; minimum-window readability is manual evidence."
+      ]
+    },
+    {
+      "id": "PRD-RELEASE-130",
+      "title": "MacDashboard v1.3.0 public release",
+      "status": "partial",
+      "priority": "P0",
+      "summary": "The v1.3.0 README, eight Retina screenshots, evidence-based release notes, versioned app bundle, DMG, ZIP and checksums are prepared and locally verified. GitHub publication is still in progress; repository coverage remains below policy.",
+      "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots"],
+      "acceptance_criteria": [
+        "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
+        "The app bundle, DMG, ZIP, tag and release notes use version 1.3.0.",
+        "Release artifacts mount or extract successfully, contain a strictly verifiable signed app, and publish SHA-256 checksums.",
+        "GitHub main, tag v1.3.0, release page and all downloadable assets are publicly reachable.",
+        "Any unmet release policy or live destructive-action gap remains explicit in the release note and final verdict."
+      ],
+      "test_case_counts": { "total": 2, "passed": 2, "failed": 0, "not_covered": 0 },
+      "test_cases": [
+        {
+          "id": "REL-README-001",
+          "status": "verified",
+          "use_cases": ["Review all Dashboard capabilities before download"],
+          "types": ["documentation", "visual"],
+          "role": "GitHub visitor",
+          "fixture": "Installed MacDashboard v1.3.0 on the current Mac",
+          "steps": ["Capture each tab as PNG", "Open every image at original detail", "Validate each README image target"],
+          "expected": "Eight sharp, current and source-aware screenshots render without broken paths or stale feature claims.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["Eight assets/screenshots PNG files measure 1440 x 1050.", "All eight were opened at original detail and inspected; primary controls, labels and values are readable.", "The Process Manager public screenshot is filtered to MacDashboard-related rows, and the AI screenshot is scoped to the current mac-tool-kit Active session with estimates disabled consistently."]
+        },
+        {
+          "id": "REL-PACKAGE-001",
+          "status": "verified",
+          "use_cases": ["Download and install the v1.3.0 release"],
+          "types": ["build", "package", "signature"],
+          "role": "Mac operator",
+          "fixture": "v1.3.0 DMG and ZIP generated from the current working tree",
+          "steps": ["Build release app", "Mount DMG", "Extract ZIP", "Read bundle version", "Verify code signature", "Compare checksums"],
+          "expected": "Both archives contain a version 1.3.0 app that passes strict signature verification and matches published checksums.",
+          "automated_status": "passed",
+          "manual_status": "passed",
+          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.0 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.0.md."]
+        }
+      ],
+      "tasks": [
+        { "id": "TASK-RELEASE-README", "title": "Replace stale README claims and add all current screenshots", "status": "done" },
+        { "id": "TASK-RELEASE-PACKAGE", "title": "Build and verify versioned DMG, ZIP and checksums", "status": "done" },
+        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "doing" }
+      ],
+      "gaps": [
+        "GitHub publication and public download verification are pending.",
+        "Combined source line coverage is 71.04 percent, below the repository 95 percent release target.",
+        "The release artifacts are ad-hoc signed and not Apple-notarized."
+      ]
+    }
+  ],
+  "migration_maps": [],
+  "quote_integration": null,
+  "decisions": [
+    {
+      "id": "DEC-001",
+      "status": "accepted",
+      "decision": "Use exact Codex turn status for Active; otherwise cross-check provider process, project CWD, and 30-second transcript freshness to classify Active, Idle, or Inactive."
+    },
+    {
+      "id": "DEC-002",
+      "status": "accepted",
+      "decision": "Use a 24-hour Recent buffer after a task becomes inactive, then move it to History without deleting it."
+    },
+    {
+      "id": "DEC-003",
+      "status": "accepted",
+      "decision": "Remove actual billing from the UI; when exact model and billable token buckets exist, show a dated official-rate API-equivalent estimate by default and label it as non-billing."
+    },
+    {
+      "id": "DEC-004",
+      "status": "accepted",
+      "decision": "Only render measured physical temperature component cards. Keep provider metadata-only AI records for provenance, but hide them from Recent/History usage analysis by default and never hide real Active records."
+    },
+    {
+      "id": "DEC-005",
+      "status": "accepted",
+      "decision": "Default permanent History to collapsed projects, page each expanded branch in 40-row batches, refresh Active every 10 seconds and Recent every 30 seconds, and refresh History only on explicit request."
+    },
+    {
+      "id": "DEC-006",
+      "status": "accepted",
+      "decision": "Remove purge from RAM and Lag remediation because macOS purge only clears disk buffer cache and cannot clear VM inactive pages; explain inactive pages as automatically reclaimable instead."
+    },
+    {
+      "id": "DEC-007",
+      "status": "accepted",
+      "decision": "Use measured storage inventory, impact-ranked opt-in selection, destructive confirmation, an exact cleanup allow-list, and after-state measurement. Keep Docker storage externally managed and never include volumes in ordinary cleanup."
+    }
+  ]
+}

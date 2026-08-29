@@ -18,7 +18,7 @@ public struct OverviewView: View {
                             Text("Mac 系統狀態總覽")
                                 .font(.title2.bold())
                         }
-                        Text("實時監控 CPU、RAM、磁碟、網路與散熱狀態")
+                        Text("顯示各來源的最新取樣；不可取得與衍生值會明確標示")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
@@ -96,12 +96,12 @@ public struct OverviewView: View {
                     }
 
                     // RAM Card
-                    GlassCard(title: "記憶體 (RAM)", iconName: "memorychip", accentColor: .purple) {
+                    GlassCard(title: "記憶體（衍生使用量）", iconName: "memorychip", accentColor: .purple) {
                         HStack(spacing: 20) {
                             CircularGaugeView(
                                 percentage: dashboardVM.memorySnapshot.usedPercentage,
-                                title: "已使用",
-                                subtitle: "\(String(format: "%.1f", Double(dashboardVM.memorySnapshot.usedBytes) / (1024*1024*1024))) / \(String(format: "%.0f", Double(dashboardVM.memorySnapshot.totalPhysicalBytes) / (1024*1024*1024))) GB",
+                                title: "衍生使用量",
+                                subtitle: "\(String(format: "%.1f", Double(dashboardVM.memorySnapshot.usedBytes) / (1024*1024*1024))) / \(String(format: "%.0f", Double(dashboardVM.memorySnapshot.totalPhysicalBytes) / (1024*1024*1024))) GiB",
                                 iconName: "memorychip",
                                 size: 100
                             )
@@ -110,15 +110,15 @@ public struct OverviewView: View {
                                 HStack {
                                     Text("活躍 RAM:").foregroundColor(.secondary)
                                     Spacer()
-                                    Text("\(dashboardVM.memorySnapshot.activeBytes / (1024*1024)) MB (\(String(format: "%.1f%%", (Double(dashboardVM.memorySnapshot.activeBytes) / Double(max(1, dashboardVM.memorySnapshot.totalPhysicalBytes))) * 100.0)))").bold()
+                                    Text("\(dashboardVM.memorySnapshot.activeBytes / (1024*1024)) MiB (\(String(format: "%.1f%%", (Double(dashboardVM.memorySnapshot.activeBytes) / Double(max(1, dashboardVM.memorySnapshot.totalPhysicalBytes))) * 100.0)))").bold()
                                 }
                                 HStack {
                                     Text("壓縮記憶體:").foregroundColor(.secondary)
                                     Spacer()
-                                    Text("\(dashboardVM.memorySnapshot.compressedBytes / (1024*1024)) MB").bold()
+                                    Text("\(dashboardVM.memorySnapshot.compressedBytes / (1024*1024)) MiB").bold()
                                 }
                                 HStack {
-                                    Text("記憶體壓力:").foregroundColor(.secondary)
+                                    Text("Dashboard 衍生壓力:").foregroundColor(.secondary)
                                     Spacer()
                                     Text(dashboardVM.memorySnapshot.pressureState.rawValue)
                                         .font(.system(size: 11, weight: .bold))
@@ -146,10 +146,10 @@ public struct OverviewView: View {
                                     .tint(mainVol.usedPercentage > 85 ? .red : .orange)
 
                                 HStack {
-                                    Text("可用: \(mainVol.freeBytes / (1024*1024*1024)) GB")
+                                    Text("可用: \(mainVol.freeBytes / (1024*1024*1024)) GiB")
                                         .font(.caption).foregroundColor(.secondary)
                                     Spacer()
-                                    Text("總計: \(mainVol.totalBytes / (1024*1024*1024)) GB")
+                                    Text("總計: \(mainVol.totalBytes / (1024*1024*1024)) GiB")
                                         .font(.caption).foregroundColor(.secondary)
                                 }
                             } else {
@@ -160,10 +160,10 @@ public struct OverviewView: View {
                             Divider()
 
                             HStack {
-                                Label("\(String(format: "%.1f", dashboardVM.diskIOSnapshot.readBytesPerSec / (1024*1024))) MB/s", systemImage: "arrow.down.circle")
+                                Label("\(String(format: "%.1f", dashboardVM.diskIOSnapshot.readBytesPerSec / (1024*1024))) MiB/s", systemImage: "arrow.down.circle")
                                     .font(.caption)
                                 Spacer()
-                                Label("\(String(format: "%.1f", dashboardVM.diskIOSnapshot.writeBytesPerSec / (1024*1024))) MB/s", systemImage: "arrow.up.circle")
+                                Label("\(String(format: "%.1f", dashboardVM.diskIOSnapshot.writeBytesPerSec / (1024*1024))) MiB/s", systemImage: "arrow.up.circle")
                                     .font(.caption)
                             }
                             .foregroundColor(.secondary)
@@ -215,14 +215,14 @@ public struct OverviewView: View {
                                 HStack {
                                     Text("電池電量:").foregroundColor(.secondary)
                                     Spacer()
-                                    Text("\(dashboardVM.batteryThermalSnapshot.batteryPercentage)% \(dashboardVM.batteryThermalSnapshot.isCharging ? "⚡" : "")").bold()
+                                    Text(dashboardVM.batteryThermalSnapshot.batteryPercentage.map { "\($0)% \(dashboardVM.batteryThermalSnapshot.isCharging ? "⚡" : "")" } ?? "不可取得").bold()
                                 }
                                 .font(.system(size: 12))
 
                                 HStack {
                                     Text("電池溫度:").foregroundColor(.secondary)
                                     Spacer()
-                                    Text(String(format: "%.1f °C", dashboardVM.batteryThermalSnapshot.batteryTemperatureCelsius)).bold()
+                                    Text(formatOptionalTemperature(dashboardVM.batteryThermalSnapshot.batteryTemperatureCelsius)).bold()
                                 }
                                 .font(.system(size: 12))
                             }
@@ -233,7 +233,7 @@ public struct OverviewView: View {
                                 Text("風扇轉速:")
                                     .foregroundColor(.secondary)
                                 Spacer()
-                                Text("\(dashboardVM.fanStatuses.first?.currentRPM ?? 1800) RPM")
+                                Text(dashboardVM.fanStatuses.first.map { "\($0.currentRPM) RPM（實際讀回）" } ?? "不可取得")
                                     .font(.system(size: 13, weight: .bold))
                                     .foregroundColor(.accentColor)
                             }
@@ -369,20 +369,24 @@ public struct OverviewView: View {
         }
     }
 
+    private func formatOptionalTemperature(_ value: Double?) -> String {
+        value.map { String(format: "%.1f °C", $0) } ?? "不可取得"
+    }
+
     private func formatMemory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / (1024 * 1024)
         if mb >= 1024 {
-            return String(format: "%.2f GB", mb / 1024)
+            return String(format: "%.2f GiB", mb / 1024)
         } else {
-            return String(format: "%.0f MB", mb)
+            return String(format: "%.0f MiB", mb)
         }
     }
 
     private func formatSpeed(_ bytesPerSec: Double) -> String {
         if bytesPerSec >= 1024 * 1024 {
-            return String(format: "%.1f MB/s", bytesPerSec / (1024 * 1024))
+            return String(format: "%.1f MiB/s", bytesPerSec / (1024 * 1024))
         } else {
-            return String(format: "%.1f KB/s", bytesPerSec / 1024)
+            return String(format: "%.1f KiB/s", bytesPerSec / 1024)
         }
     }
 }

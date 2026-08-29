@@ -25,9 +25,18 @@ let package = Package(
     dependencies: [],
     targets: [
         .target(
+            name: "MacToolKitHardwareABI",
+            dependencies: [],
+            path: "Sources/MacToolKitHardwareABI"
+        ),
+        .target(
             name: "MacToolKitCore",
             dependencies: [],
-            path: "Sources/MacToolKitCore"
+            path: "Sources/MacToolKitCore",
+            linkerSettings: [
+                .linkedFramework("IOKit"),
+                .linkedLibrary("sqlite3")
+            ]
         ),
         .executableTarget(
             name: "MacDashboardApp",
@@ -36,12 +45,12 @@ let package = Package(
         ),
         .executableTarget(
             name: "MacDashboardFanHelper",
-            dependencies: [],
+            dependencies: ["MacToolKitHardwareABI"],
             path: "Sources/MacDashboardFanHelper"
         ),
         .testTarget(
             name: "MacToolKitCoreTests",
-            dependencies: ["MacToolKitCore"],
+            dependencies: ["MacToolKitCore", "MacToolKitHardwareABI"],
             path: "Tests/MacToolKitCoreTests"
         )
     ]

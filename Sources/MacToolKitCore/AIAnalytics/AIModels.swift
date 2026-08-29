@@ -24,23 +24,128 @@ public enum AIToolType: String, Codable, Sendable, CaseIterable, Identifiable {
 }
 
 public enum AISessionStatus: String, Codable, Sendable, CaseIterable, Identifiable {
+    case unknown = "狀態不明 (Unknown)"
     case active = "執行中 (Active)"
     case thinking = "深度推理 (Thinking)"
     case executingTool = "呼叫工具 (Tool Executing)"
-    case idle = "等待輸入 (Idle)"
-    case completed = "已完成 (Completed)"
+    case idle = "程序存在（Idle）"
+    case completed = "非執行中 (Inactive)"
     case aborted = "已終止 (Aborted)"
 
     public var id: String { rawValue }
 
     public var statusColorName: String {
         switch self {
+        case .unknown: return "orange"
         case .active, .executingTool: return "blue"
         case .thinking: return "purple"
         case .idle: return "green"
         case .completed: return "secondary"
         case .aborted: return "red"
         }
+    }
+}
+
+public enum AIDataProvenance: Codable, Sendable, Equatable {
+    case measured(String)
+    case providerReported(String)
+    case derived(String)
+    case estimated(String)
+    case unavailable(String)
+
+    public var label: String {
+        switch self {
+        case .measured: return "實測"
+        case .providerReported: return "供應商回報"
+        case .derived: return "衍生"
+        case .estimated: return "估算"
+        case .unavailable: return "不可取得"
+        }
+    }
+
+    public var detail: String {
+        switch self {
+        case .measured(let detail), .providerReported(let detail), .derived(let detail),
+             .estimated(let detail), .unavailable(let detail):
+            return detail
+        }
+    }
+}
+
+public enum AICostKind: String, Codable, Sendable, Equatable {
+    case actualBilling
+    case apiEquivalentEstimate
+    case unavailable
+}
+
+public struct AICostValue: Codable, Sendable, Equatable {
+    public let amountUSD: Double?
+    public let kind: AICostKind
+    public let source: AIDataProvenance
+
+    public init(amountUSD: Double?, kind: AICostKind, source: AIDataProvenance) {
+        self.amountUSD = amountUSD
+        self.kind = kind
+        self.source = source
+    }
+
+    public static let unavailable = AICostValue(
+        amountUSD: nil,
+        kind: .unavailable,
+        source: .unavailable("Provider log does not include billing or credit charges")
+    )
+
+    public static func unavailable(reason: String) -> AICostValue {
+        AICostValue(amountUSD: nil, kind: .unavailable, source: .unavailable(reason))
+    }
+
+    public static func apiEquivalentEstimate(_ amountUSD: Double, source: String) -> AICostValue {
+        AICostValue(amountUSD: amountUSD, kind: .apiEquivalentEstimate, source: .estimated(source))
+    }
+}
+
+public enum AISessionLifecycle: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
+    case active
+    case recent
+    case history
+
+    public var id: String { rawValue }
+
+    public static func classify(
+        status: AISessionStatus,
+        lastActiveAt: Date,
+        now: Date = Date(),
+        recentWindow: TimeInterval = 24 * 60 * 60
+    ) -> AISessionLifecycle {
+        switch status {
+        case .active, .thinking, .executingTool:
+            return .active
+        case .idle, .unknown, .completed, .aborted:
+            return now.timeIntervalSince(lastActiveAt) < recentWindow ? .recent : .history
+        }
+    }
+}
+
+public enum AISessionScopeSelection {
+    public static func reconcile(
+        current: AISessionRecord?,
+        visibleSessions: [AISessionRecord]
+    ) -> AISessionRecord? {
+        guard let current else { return visibleSessions.first }
+        return visibleSessions.first { $0.id == current.id } ?? visibleSessions.first
+    }
+}
+
+public enum AISessionPresentation {
+    /// Active scope must never hide a real runtime record. In recent/history,
+    /// metadata-only provider records are optional because they cannot support
+    /// model, token, or cost analysis even though their ID and timestamps are real.
+    public static func shouldInclude(
+        _ session: AISessionRecord,
+        lifecycle: AISessionLifecycle,
+        showActivityOnlyRecords: Bool
+    ) -> Bool {
+        lifecycle == .active || showActivityOnlyRecords || !session.isActivityOnlyRecord
     }
 }
 
@@ -76,21 +181,32 @@ public struct AITokenUsageSummary: Codable, Sendable, Equatable {
     public let cacheWriteTokens: Int64
     public let thinkingTokens: Int64
     public let totalTokens: Int64
+    public let source: AIDataProvenance
 
     public init(
         inputTokens: Int64 = 0,
         outputTokens: Int64 = 0,
         cacheReadTokens: Int64 = 0,
         cacheWriteTokens: Int64 = 0,
-        thinkingTokens: Int64 = 0
+        thinkingTokens: Int64 = 0,
+        providerTotalTokens: Int64? = nil,
+        source: AIDataProvenance = .providerReported("Provider message usage")
     ) {
         self.inputTokens = inputTokens
         self.outputTokens = outputTokens
         self.cacheReadTokens = cacheReadTokens
         self.cacheWriteTokens = cacheWriteTokens
         self.thinkingTokens = thinkingTokens
-        self.totalTokens = inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens + thinkingTokens
+        // Cache and reasoning fields can be subsets of input/output for some providers.
+        // Prefer the provider's explicit total; otherwise count each provider bucket once.
+        self.totalTokens = providerTotalTokens ?? (inputTokens + outputTokens + cacheReadTokens + cacheWriteTokens)
+        self.source = source
     }
+
+    public static let unavailable = AITokenUsageSummary(
+        providerTotalTokens: 0,
+        source: .unavailable("Provider log does not expose token usage")
+    )
 }
 
 public struct AIModelUsage: Identifiable, Codable, Sendable, Equatable {
@@ -184,21 +300,24 @@ public struct AITurnRecord: Identifiable, Codable, Sendable, Equatable {
 }
 
 // MARK: - Session Record
-public struct AISessionRecord: Identifiable, Sendable {
-    public var id: String { sessionId }
+public struct AISessionRecord: Identifiable, Codable, Sendable {
+    public var id: String { "\(toolType.rawValue):\(sessionId)" }
     public let sessionId: String
     public let sessionShortId: String
     public let toolType: AIToolType
+    public let title: String
     public let projectName: String
     public let parentProjectName: String
     public let projectPath: String
     public let gitBranch: String?
     public let isSubagent: Bool
+    public let parentSessionId: String?
     public let subagentSlug: String?
     public let startedAt: Date
     public let lastActiveAt: Date
     public let durationSeconds: TimeInterval
     public let status: AISessionStatus
+    public let statusSource: AIDataProvenance
     public let livePID: pid_t?
     public let liveCPU: Double?
     public let liveMemoryBytes: UInt64?
@@ -208,8 +327,30 @@ public struct AISessionRecord: Identifiable, Sendable {
     public let modelsUsed: [AIModelUsage]
     public let taskBreakdown: [AITaskCategoryUsage]
     public let tokenUsage: AITokenUsageSummary
-    public let estimatedCostUSD: Double
+    public let cost: AICostValue
     public let turns: [AITurnRecord]
+
+    public var lifecycle: AISessionLifecycle {
+        AISessionLifecycle.classify(status: status, lastActiveAt: lastActiveAt)
+    }
+
+    public var estimatedCostUSD: Double {
+        cost.kind == .apiEquivalentEstimate ? (cost.amountUSD ?? 0) : 0
+    }
+
+    public var actualCostUSD: Double? {
+        cost.kind == .actualBilling ? cost.amountUSD : nil
+    }
+
+    public var transcriptSpanSeconds: TimeInterval {
+        max(0, lastActiveAt.timeIntervalSince(startedAt))
+    }
+
+    public var isActivityOnlyRecord: Bool {
+        guard modelsUsed.isEmpty else { return false }
+        if case .unavailable = tokenUsage.source { return true }
+        return false
+    }
 
     public var formattedDuration: String {
         let total = Int(max(0, durationSeconds))
@@ -238,16 +379,19 @@ public struct AISessionRecord: Identifiable, Sendable {
         sessionId: String,
         sessionShortId: String? = nil,
         toolType: AIToolType,
+        title: String? = nil,
         projectName: String,
         parentProjectName: String? = nil,
         projectPath: String,
         gitBranch: String? = nil,
         isSubagent: Bool = false,
+        parentSessionId: String? = nil,
         subagentSlug: String? = nil,
         startedAt: Date,
         lastActiveAt: Date,
         durationSeconds: TimeInterval,
         status: AISessionStatus,
+        statusSource: AIDataProvenance = .unavailable("Provider does not expose a live task status"),
         livePID: pid_t? = nil,
         liveCPU: Double? = nil,
         liveMemoryBytes: UInt64? = nil,
@@ -256,22 +400,26 @@ public struct AISessionRecord: Identifiable, Sendable {
         modelsUsed: [AIModelUsage],
         taskBreakdown: [AITaskCategoryUsage],
         tokenUsage: AITokenUsageSummary,
-        estimatedCostUSD: Double,
+        cost: AICostValue? = nil,
+        estimatedCostUSD: Double? = nil,
         turns: [AITurnRecord] = []
     ) {
         self.sessionId = sessionId
         self.sessionShortId = sessionShortId ?? String(sessionId.prefix(8))
         self.toolType = toolType
+        self.title = title ?? projectName
         self.projectName = projectName
         self.parentProjectName = parentProjectName ?? projectName
         self.projectPath = projectPath
         self.gitBranch = gitBranch
         self.isSubagent = isSubagent
+        self.parentSessionId = parentSessionId
         self.subagentSlug = subagentSlug
         self.startedAt = startedAt
         self.lastActiveAt = lastActiveAt
         self.durationSeconds = durationSeconds
         self.status = status
+        self.statusSource = statusSource
         self.livePID = livePID
         self.liveCPU = liveCPU
         self.liveMemoryBytes = liveMemoryBytes
@@ -280,33 +428,59 @@ public struct AISessionRecord: Identifiable, Sendable {
         self.modelsUsed = modelsUsed
         self.taskBreakdown = taskBreakdown
         self.tokenUsage = tokenUsage
-        self.estimatedCostUSD = estimatedCostUSD
+        if let cost {
+            self.cost = cost
+        } else if let estimatedCostUSD {
+            self.cost = .apiEquivalentEstimate(
+                estimatedCostUSD,
+                source: "Local token-rate comparison; not provider billing"
+            )
+        } else {
+            self.cost = .unavailable
+        }
         self.turns = turns
     }
 }
 
 // MARK: - Hierarchical Project Workspace Group
 public struct AIProjectWorkspace: Identifiable, Sendable {
-    public var id: String { projectName }
+    public var id: String {
+        projectPath.isEmpty ? "unlinked:\(projectName)" : projectPath
+    }
     public let projectName: String
     public let projectPath: String
     public let totalTokens: Int64
-    public let totalCostUSD: Double
+    public let actualCostUSD: Double?
+    public let apiEquivalentEstimateUSD: Double?
+    public let apiEquivalentEstimateIsComplete: Bool
     public let totalDurationSeconds: TimeInterval
     public let sessionCount: Int
     public let mainSessions: [AISessionRecord]
     public let subagentSessions: [AISessionRecord]
+    private let childrenByParentKey: [String: [AISessionRecord]]
+    public let unlinkedSubagentSessions: [AISessionRecord]
+
+    public var totalCostUSD: Double { actualCostUSD ?? 0 }
 
     public var hasLiveActive: Bool {
-        mainSessions.contains(where: { $0.livePID != nil }) ||
-        subagentSessions.contains(where: { $0.livePID != nil })
+        (mainSessions + subagentSessions).contains { $0.lifecycle == .active }
+    }
+
+    public func children(of mainSession: AISessionRecord) -> [AISessionRecord] {
+        childrenByParentKey[Self.parentKey(
+            toolType: mainSession.toolType,
+            sessionId: mainSession.sessionId
+        )] ?? []
     }
 
     public init(
         projectName: String,
         projectPath: String,
         totalTokens: Int64,
-        totalCostUSD: Double,
+        totalCostUSD: Double = 0,
+        actualCostUSD: Double? = nil,
+        apiEquivalentEstimateUSD: Double? = nil,
+        apiEquivalentEstimateIsComplete: Bool? = nil,
         totalDurationSeconds: TimeInterval,
         sessionCount: Int,
         mainSessions: [AISessionRecord],
@@ -315,11 +489,41 @@ public struct AIProjectWorkspace: Identifiable, Sendable {
         self.projectName = projectName
         self.projectPath = projectPath
         self.totalTokens = totalTokens
-        self.totalCostUSD = totalCostUSD
+        self.actualCostUSD = actualCostUSD ?? (totalCostUSD > 0 ? totalCostUSD : nil)
+        self.apiEquivalentEstimateUSD = apiEquivalentEstimateUSD
+        let tokenBearingSessions = (mainSessions + subagentSessions).filter { session in
+            guard session.tokenUsage.totalTokens > 0 else { return false }
+            if case .unavailable = session.tokenUsage.source { return false }
+            return true
+        }
+        self.apiEquivalentEstimateIsComplete = apiEquivalentEstimateIsComplete
+            ?? (!tokenBearingSessions.isEmpty && tokenBearingSessions.allSatisfy {
+                $0.cost.kind == .apiEquivalentEstimate && $0.cost.amountUSD != nil
+            })
         self.totalDurationSeconds = totalDurationSeconds
         self.sessionCount = sessionCount
         self.mainSessions = mainSessions
         self.subagentSessions = subagentSessions
+        let mainIDs = Set(mainSessions.map {
+            Self.parentKey(toolType: $0.toolType, sessionId: $0.sessionId)
+        })
+        var groupedChildren: [String: [AISessionRecord]] = [:]
+        for child in subagentSessions {
+            guard let parent = child.parentSessionId else { continue }
+            groupedChildren[
+                Self.parentKey(toolType: child.toolType, sessionId: parent),
+                default: []
+            ].append(child)
+        }
+        self.childrenByParentKey = groupedChildren
+        self.unlinkedSubagentSessions = subagentSessions.filter { child in
+            guard let parent = child.parentSessionId else { return true }
+            return !mainIDs.contains(Self.parentKey(toolType: child.toolType, sessionId: parent))
+        }
+    }
+
+    private static func parentKey(toolType: AIToolType, sessionId: String) -> String {
+        "\(toolType.rawValue)::\(sessionId)"
     }
 }
 
@@ -329,14 +533,25 @@ public struct AIProjectSummary: Identifiable, Sendable {
     public let projectName: String
     public let sessionCount: Int
     public let totalTokens: Int64
-    public let totalCostUSD: Double
+    public let actualCostUSD: Double?
+    public let apiEquivalentEstimateUSD: Double?
+    public var totalCostUSD: Double { actualCostUSD ?? 0 }
     public let totalDurationSeconds: TimeInterval
 
-    public init(projectName: String, sessionCount: Int, totalTokens: Int64, totalCostUSD: Double, totalDurationSeconds: TimeInterval) {
+    public init(
+        projectName: String,
+        sessionCount: Int,
+        totalTokens: Int64,
+        totalCostUSD: Double = 0,
+        actualCostUSD: Double? = nil,
+        apiEquivalentEstimateUSD: Double? = nil,
+        totalDurationSeconds: TimeInterval
+    ) {
         self.projectName = projectName
         self.sessionCount = sessionCount
         self.totalTokens = totalTokens
-        self.totalCostUSD = totalCostUSD
+        self.actualCostUSD = actualCostUSD ?? (totalCostUSD > 0 ? totalCostUSD : nil)
+        self.apiEquivalentEstimateUSD = apiEquivalentEstimateUSD
         self.totalDurationSeconds = totalDurationSeconds
     }
 }
@@ -346,6 +561,7 @@ public struct AIAnalyticsSummary: Sendable {
     public let activeSessions: [AISessionRecord]
     public let projectWorkspaces: [AIProjectWorkspace]
     public let recentSessions: [AISessionRecord]
+    public let historySessions: [AISessionRecord]
     public let totalSessionsCount: Int
     public let totalDurationSeconds: TimeInterval
     public let totalTokensAllTime: Int64
@@ -355,11 +571,13 @@ public struct AIAnalyticsSummary: Sendable {
     public let topProjects: [AIProjectSummary]
     public let allModelsUsed: [AIModelUsage]
     public let allTasksBreakdown: [AITaskCategoryUsage]
+    public let historyPersistenceStatus: AIDataProvenance
 
     public init(
         activeSessions: [AISessionRecord] = [],
         projectWorkspaces: [AIProjectWorkspace] = [],
         recentSessions: [AISessionRecord] = [],
+        historySessions: [AISessionRecord] = [],
         totalSessionsCount: Int = 0,
         totalDurationSeconds: TimeInterval = 0,
         totalTokensAllTime: Int64 = 0,
@@ -368,11 +586,13 @@ public struct AIAnalyticsSummary: Sendable {
         totalCostUSDToday: Double = 0,
         topProjects: [AIProjectSummary] = [],
         allModelsUsed: [AIModelUsage] = [],
-        allTasksBreakdown: [AITaskCategoryUsage] = []
+        allTasksBreakdown: [AITaskCategoryUsage] = [],
+        historyPersistenceStatus: AIDataProvenance = .unavailable("History index has not been written yet")
     ) {
         self.activeSessions = activeSessions
         self.projectWorkspaces = projectWorkspaces
         self.recentSessions = recentSessions
+        self.historySessions = historySessions
         self.totalSessionsCount = totalSessionsCount
         self.totalDurationSeconds = totalDurationSeconds
         self.totalTokensAllTime = totalTokensAllTime
@@ -382,5 +602,6 @@ public struct AIAnalyticsSummary: Sendable {
         self.topProjects = topProjects
         self.allModelsUsed = allModelsUsed
         self.allTasksBreakdown = allTasksBreakdown
+        self.historyPersistenceStatus = historyPersistenceStatus
     }
 }

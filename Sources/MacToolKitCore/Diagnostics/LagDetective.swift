@@ -14,6 +14,10 @@ public final class LagDetective: Sendable {
         var score = 100
         var causes: [LagCauseItem] = []
         var actions: [RemediationAction] = []
+        let actionableProcesses = processes.filter { process in
+            process.bundleIdentifier != "com.peterting.mac-tool-kit.dashboard"
+                && process.rawName != "MacDashboardApp"
+        }
 
         // 1. CPU Analysis
         if cpu.totalUsage > 85.0 {
@@ -37,19 +41,19 @@ public final class LagDetective: Sendable {
         }
 
         // Check Top CPU Process
-        if let topCPU = processes.first(where: { $0.cpuPercentage > 50.0 }) {
+        if let topCPU = actionableProcesses.first(where: { $0.cpuPercentage > 50.0 }) {
             score -= 15
             let projStr = topCPU.projectName != nil ? "在 [\(topCPU.projectName!)] 專案中" : ""
             let triggerStr = topCPU.triggerAppName != nil ? "由 \(topCPU.triggerAppName!) 執行的 " : ""
 
             if let ai = topCPU.aiContext {
                 let aiHeader = "\(ai.toolName)" + (ai.modelName != nil ? " (\(ai.modelName!))" : "")
-                let aiSession = ai.sessionShortId != nil ? " • Session \(ai.sessionShortId!)" : ""
+                let aiSession = ai.sessionShortId != nil ? " • 推導 Context \(ai.sessionShortId!)" : ""
                 let taskPart = ai.taskSummary != nil ? " [\(ai.taskSummary!)]" : ""
 
                 causes.append(LagCauseItem(
                     category: "AI 運算尖峰",
-                    title: "🤖 \(aiHeader)\(aiSession) 負載尖峰 (\(String(format: "%.1f", topCPU.cpuPercentage))% CPU)",
+                    title: "🤖 \(aiHeader)\(aiSession) 行程負載尖峰 (\(String(format: "%.1f", topCPU.cpuPercentage))% CPU)",
                     detail: "PID \(topCPU.pid)（\(triggerStr)\(projStr)\(taskPart)已運作 \(topCPU.formattedUptime)）：\(topCPU.terminationImpact)。",
                     iconName: "brain.head.profile",
                     isMajor: true
@@ -57,9 +61,9 @@ public final class LagDetective: Sendable {
 
                 actions.append(RemediationAction(
                     typeId: "kill_cpu_hog",
-                    title: "中止 \(ai.toolName) 任務 Session",
-                    explanation: "中止由 \(ai.toolName) (模型: \(ai.modelName ?? "預設")) 執行的背景任務，立即釋放 \(String(format: "%.1f", topCPU.cpuPercentage))% CPU 核心運算。",
-                    buttonTitle: "結束 AI Session (PID \(topCPU.pid))",
+                    title: "中止 \(ai.toolName) 相關行程",
+                    explanation: "中止推導為 \(ai.toolName)（模型: \(ai.modelName ?? "不可取得")）的 PID \(topCPU.pid)。CPU 百分比是當次取樣，不承諾釋放固定比例。",
+                    buttonTitle: "結束 AI 行程 (PID \(topCPU.pid))",
                     iconName: "stop.circle.fill",
                     pid: topCPU.pid,
                     isDestructive: true
@@ -76,7 +80,7 @@ public final class LagDetective: Sendable {
                 actions.append(RemediationAction(
                     typeId: "kill_cpu_hog",
                     title: "結束 \(topCPU.name)",
-                    explanation: "\(topCPU.terminationImpact)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）。可立即釋放 \(String(format: "%.1f", topCPU.cpuPercentage))% 核心運算。",
+                    explanation: "\(topCPU.terminationImpact)（\(triggerStr)\(projStr)已運作 \(topCPU.formattedUptime)）。目前 CPU 樣本為 \(String(format: "%.1f", topCPU.cpuPercentage))%；終止後的實際差異需重新取樣確認。",
                     buttonTitle: "結束「\(topCPU.name.prefix(16))」(PID \(topCPU.pid))",
                     iconName: "xmark.circle.fill",
                     pid: topCPU.pid,
@@ -101,17 +105,17 @@ public final class LagDetective: Sendable {
             causes.append(LagCauseItem(
                 category: "記憶體告急",
                 title: "RAM 記憶體壓力過高 (\(String(format: "%.1f", memory.usedPercentage))%)",
-                detail: "實體記憶體即將耗盡，系統正在頻繁進行記憶體壓縮與分頁交換。",
+                detail: "Dashboard 的 active + wired + compressed 衍生比例或 swap 門檻已達警戒；這不是 Activity Monitor 的官方 Memory Pressure。",
                 iconName: "memorychip",
                 isMajor: true
             ))
 
             actions.append(RemediationAction(
-                typeId: "purge_memory",
-                title: "釋放系統快取記憶體",
-                explanation: "清除磁碟快取與不活躍分頁，快速騰出可用實體記憶體空間。",
-                buttonTitle: "一鍵釋放 RAM",
-                iconName: "sparkles",
+                typeId: "open_memory_inspector",
+                title: "檢查實際高用量行程",
+                explanation: "macOS 會自動回收 inactive pages；系統 purge 只清 disk buffer cache，不能把非活躍 RAM 手動清零。請從行程實測值找出可關閉的工作負載。",
+                buttonTitle: "查看記憶體排行",
+                iconName: "list.bullet.rectangle",
                 isDestructive: false
             ))
         } else if memory.pressureState == .warning || memory.usedPercentage > 80.0 {
@@ -130,21 +134,26 @@ public final class LagDetective: Sendable {
             score -= 20
             let swapGB = Double(memory.swapUsedBytes) / (1024 * 1024 * 1024)
             causes.append(LagCauseItem(
-                category: "虛擬交換顛簸",
-                title: "Swap 交換空間使用過大 (\(String(format: "%.1f", swapGB)) GB)",
-                detail: "系統頻繁將記憶體寫入 SSD 硬碟，會造成顯著的點擊卡死與彩球轉圈現象。",
+                category: "Swap 使用量",
+                title: "Swap 交換空間使用過大 (\(String(format: "%.1f", swapGB)) GiB)",
+                detail: "目前已配置的 swap 容量偏高；單次容量快照不能證明正在頻繁換頁或就是卡頓原因。",
                 iconName: "externaldrive.badge.exclamationmark",
                 isMajor: true
             ))
         }
 
         // Top Memory Hogs
-        let memHogs = processes.filter { $0.memoryBytes > 2 * 1024 * 1024 * 1024 }
+        let hasSystemMemoryConcern = memory.pressureState == .warning
+            || memory.pressureState == .critical
+            || memory.usedPercentage > 80.0
+        let memHogs = hasSystemMemoryConcern
+            ? actionableProcesses.filter { $0.memoryBytes > 2 * 1024 * 1024 * 1024 }
+            : []
         for hog in memHogs.prefix(2) {
             let hogGB = Double(hog.memoryBytes) / (1024 * 1024 * 1024)
             causes.append(LagCauseItem(
                 category: "高 RAM 應用",
-                title: "「\(hog.name)」佔用 \(String(format: "%.1f", hogGB)) GB 記憶體",
+                title: "「\(hog.name)」佔用 \(String(format: "%.1f", hogGB)) GiB 記憶體",
                 detail: "PID \(hog.pid) 佔用大量記憶體空間。",
                 iconName: "shippingbox.fill",
                 isMajor: false
@@ -154,8 +163,8 @@ public final class LagDetective: Sendable {
                 actions.append(RemediationAction(
                     typeId: "kill_mem_hog",
                     title: "結束 \(hog.name)",
-                    explanation: "釋放 \(String(format: "%.1f", hogGB)) GB 記憶體空間。",
-                    buttonTitle: "結束應用 (釋放 \(String(format: "%.1f", hogGB)) GB)",
+                    explanation: "目前取樣顯示該行程佔用 \(String(format: "%.1f", hogGB)) GiB；終止後的實際可用量不保證，需重新取樣確認。",
+                    buttonTitle: "結束應用（目前佔用 \(String(format: "%.1f", hogGB)) GiB）",
                     iconName: "xmark.circle",
                     pid: hog.pid,
                     isDestructive: true
@@ -167,21 +176,16 @@ public final class LagDetective: Sendable {
         if batteryThermal.thermalState == .serious || batteryThermal.thermalState == .critical {
             score -= 25
             causes.append(LagCauseItem(
-                category: "溫度過熱降頻",
-                title: "晶片溫度過高，系統正在主動降頻",
-                detail: "硬體過熱保護觸發，CPU/GPU 運算頻率被強迫調低以保護元件。",
+                category: "系統熱狀態",
+                title: "macOS 回報 Serious / Critical 熱狀態",
+                detail: "ProcessInfo thermalState 顯示熱壓可能影響效能；Dashboard 沒有晶片溫度或頻率讀值，不能斷言特定元件正在降頻。",
                 iconName: "thermometer.high",
                 isMajor: true
             ))
 
-            actions.append(RemediationAction(
-                typeId: "fan_max_cooling",
-                title: "啟動強效散熱冷卻",
-                explanation: "將風扇轉速提升至全速，加速排出熱量並解除溫度降頻。",
-                buttonTitle: "啟動全速散熱",
-                iconName: "snowflake",
-                isDestructive: false
-            ))
+            // Thermal state alone does not prove that a writable fan controller
+            // or a safe control-grade temperature sensor is available. Report
+            // the cause without promising a remediation action we cannot verify.
         }
 
         // 4. Disk I/O Bottleneck
@@ -190,7 +194,7 @@ public final class LagDetective: Sendable {
             score -= 10
             causes.append(LagCauseItem(
                 category: "磁碟密集 I/O",
-                title: "SSD 讀寫速率達 \(String(format: "%.0f", totalDiskSpeedMB)) MB/s",
+                title: "SSD 讀寫速率達 \(String(format: "%.0f", totalDiskSpeedMB)) MiB/s",
                 detail: "硬碟正在進行巨量資料傳輸，可能暫時佔用 I/O 頻寬。",
                 iconName: "arrow.up.arrow.down.square.fill",
                 isMajor: false
@@ -204,18 +208,22 @@ public final class LagDetective: Sendable {
         let severity: LagSeverity
         let summary: String
 
-        if finalScore >= 85 {
+        let hasMajorCause = causes.contains(where: \.isMajor)
+        if hasMajorCause && finalScore >= 40 {
+            severity = .moderate
+            summary = "偵測到至少一個主要瓶頸；分數尚可不代表沒有卡頓來源，請查看原因與可驗證的處置建議。"
+        } else if finalScore >= 85 {
             severity = .smooth
-            summary = "目前系統效能處於極佳狀態，資源分配合理，無延遲卡頓跡象。"
+            summary = "目前規則沒有從 CPU、衍生 RAM 比例、swap、熱狀態與磁碟速率快照中找到明顯瓶頸；這不等於已排除所有卡頓原因。"
         } else if finalScore >= 65 {
             severity = .minor
-            summary = "系統負載稍微增加，但仍能順暢處理各項工作。"
+            summary = "規則偵測到輕度資源負載；是否造成體感卡頓仍需對照發生時間。"
         } else if finalScore >= 40 {
             severity = .moderate
             summary = "系統出現中度資源吃緊或溫度升高，建議查看上方分析原因並清理高佔用程式。"
         } else {
             severity = .severe
-            summary = "⚠️ 偵測到嚴重卡頓瓶頸！多個關鍵資源（CPU / RAM / 溫度）處於超載狀態，請立即執行修復動作。"
+            summary = "規則偵測到多個高風險資源訊號；請先核對原因與行程身分，再決定是否執行修復。"
         }
 
         return LagDiagnosticReport(

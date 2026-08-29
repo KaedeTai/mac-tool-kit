@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mac-tool-kit.local/schemas/prd-tracker.schema.json",
+  "title": "Mac Tool Kit PRD Tracker",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "project",
+    "mode",
+    "source_of_truth",
+    "acceptance_policy",
+    "summary",
+    "prd_items",
+    "migration_maps",
+    "quote_integration",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "project": { "type": "string" },
+    "mode": { "const": "local-only" },
+    "source_of_truth": { "const": "repo-json" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "acceptance_policy": { "type": "object" },
+    "summary": { "type": "object" },
+    "prd_items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/prd_item" }
+    },
+    "migration_maps": { "type": "array" },
+    "quote_integration": { "type": ["object", "null"] },
+    "decisions": { "type": "array" }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["verified", "implemented", "partial", "planned", "blocked", "not-covered"]
+    },
+    "test_case": {
+      "type": "object",
+      "required": [
+        "id",
+        "status",
+        "use_cases",
+        "types",
+        "role",
+        "fixture",
+        "steps",
+        "expected",
+        "automated_status",
+        "manual_status",
+        "evidence"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "use_cases": { "type": "array", "items": { "type": "string" } },
+        "types": { "type": "array", "items": { "type": "string" } },
+        "role": { "type": "string" },
+        "fixture": { "type": "string" },
+        "steps": { "type": "array", "items": { "type": "string" } },
+        "expected": { "type": "string" },
+        "automated_status": { "enum": ["not_run", "passed", "failed", "blocked"] },
+        "manual_status": { "enum": ["pending", "passed", "failed", "blocked", "not_required"] },
+        "evidence": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "prd_item": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "status",
+        "priority",
+        "summary",
+        "source_refs",
+        "acceptance_criteria",
+        "test_case_counts",
+        "test_cases",
+        "tasks",
+        "gaps"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "priority": { "type": "string" },
+        "summary": { "type": "string" },
+        "source_refs": { "type": "array", "items": { "type": "string" } },
+        "acceptance_criteria": { "type": "array", "items": { "type": "string" } },
+        "test_case_counts": { "type": "object" },
+        "test_cases": { "type": "array", "items": { "$ref": "#/$defs/test_case" } },
+        "tasks": { "type": "array" },
+        "gaps": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

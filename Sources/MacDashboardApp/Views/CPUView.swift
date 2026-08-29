@@ -5,7 +5,7 @@ public struct CPUView: View {
     @ObservedObject var dashboardVM: DashboardViewModel
 
     private let columns = [
-        GridItem(.adaptive(minimum: 110, maximum: 150), spacing: 12)
+        GridItem(.adaptive(minimum: 135, maximum: 175), spacing: 12)
     ]
 
     public var body: some View {
@@ -50,15 +50,23 @@ public struct CPUView: View {
 
                 // Per Core Visualizer
                 GlassCard(title: "各核心即時負載分佈 (Per-Core Loads)", iconName: "square.grid.3x3.fill", accentColor: .cyan) {
-                    LazyVGrid(columns: columns, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("* 核心類型由 hw.perflevel 的群組名稱與數量依序對應；macOS 未提供逐核心類型 ID。負載百分比則為逐核心 Mach 計數器實測。")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+
+                        LazyVGrid(columns: columns, spacing: 12) {
                         ForEach(dashboardVM.cpuSnapshot.cores) { core in
                             VStack(alignment: .leading, spacing: 6) {
                                 HStack {
                                     Text("Core \(core.coreNumber)")
                                         .font(.system(size: 12, weight: .bold))
                                     Spacer()
-                                    Text(core.isPerformanceCore ? "P-Core" : "E-Core")
+                                    Text(core.coreTypeName)
                                         .font(.system(size: 9, weight: .semibold))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.72)
+                                        .fixedSize(horizontal: true, vertical: false)
                                         .padding(.horizontal, 4)
                                         .padding(.vertical, 2)
                                         .background(core.isPerformanceCore ? Color.orange.opacity(0.2) : Color.blue.opacity(0.2))
@@ -77,6 +85,7 @@ public struct CPUView: View {
                             .background(Color(nsColor: .controlBackgroundColor).opacity(0.5))
                             .cornerRadius(10)
                         }
+                    }
                     }
                 }
 
@@ -135,9 +144,9 @@ public struct CPUView: View {
     private func formatMemory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / (1024 * 1024)
         if mb >= 1024 {
-            return String(format: "%.2f GB", mb / 1024)
+            return String(format: "%.2f GiB", mb / 1024)
         } else {
-            return String(format: "%.0f MB", mb)
+            return String(format: "%.0f MiB", mb)
         }
     }
 

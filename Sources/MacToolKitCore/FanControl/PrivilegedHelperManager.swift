@@ -19,6 +19,10 @@ public final class PrivilegedHelperManager: Sendable {
         return await FanHelperClient.shared.ping()
     }
 
+    public func capability() async -> FanHelperCapability {
+        await FanHelperClient.shared.probeCapability()
+    }
+
     public func locateBundledHelper() -> URL? {
         // 1. Check in Bundle.main.resourceURL
         if let resURL = Bundle.main.resourceURL {
@@ -114,15 +118,18 @@ public final class PrivilegedHelperManager: Sendable {
             }
             _ = output
 
-            // Wait a brief moment for socket to be ready
+            // Installation is successful only after measured fan readback is
+            // available. A ping alone merely proves that the daemon launched.
+            var lastCapability: FanHelperCapability = .unreachable
             for _ in 0..<15 {
                 try? await Task.sleep(nanoseconds: 200_000_000)
-                if await isRunning() {
+                lastCapability = await capability()
+                if lastCapability.hasVerifiedFanReadback {
                     return .success(())
                 }
             }
 
-            return .success(())
+            return .failure(HelperError("助手已安裝，但未通過硬體讀回驗證（\(lastCapability.localizedDescription)）；未宣告啟用成功。"))
         } else {
             return .failure(HelperError("無法建立 AppleScript 執行環境"))
         }

@@ -2,6 +2,7 @@ import Foundation
 import Darwin
 
 public enum LagSeverity: String, Sendable {
+    case unknown = "尚未診斷 (Not Run)"
     case smooth = "系統極致順暢 (Smooth)"
     case minor = "輕微負載 (Normal Load)"
     case moderate = "中度遲滯 (Moderate Lag)"
@@ -9,6 +10,7 @@ public enum LagSeverity: String, Sendable {
 
     public var badgeColorHex: String {
         switch self {
+        case .unknown: return "#8E8E93"
         case .smooth: return "#34C759"     // Green
         case .minor: return "#30B0C7"      // Cyan/Teal
         case .moderate: return "#FF9500"   // Orange
@@ -18,6 +20,7 @@ public enum LagSeverity: String, Sendable {
 
     public var systemIcon: String {
         switch self {
+        case .unknown: return "questionmark.circle"
         case .smooth: return "checkmark.seal.fill"
         case .minor: return "info.circle.fill"
         case .moderate: return "exclamationmark.triangle.fill"
@@ -73,9 +76,9 @@ public struct LagDiagnosticReport: Sendable {
     public let timestamp: Date
 
     public init(
-        healthScore: Int = 100,
-        severity: LagSeverity = .smooth,
-        summary: String = "系統運作良好，未發現異常資源佔用或延遲瓶頸。",
+        healthScore: Int = 0,
+        severity: LagSeverity = .unknown,
+        summary: String = "尚未執行規則式 Lag 診斷。",
         causes: [LagCauseItem] = [],
         suggestedActions: [RemediationAction] = [],
         timestamp: Date = Date()

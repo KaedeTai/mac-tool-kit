@@ -61,10 +61,10 @@ public struct FanStatus: Identifiable, Sendable {
     public init(
         fanIndex: Int = 0,
         name: String = "主散熱風扇",
-        currentRPM: Int = 1800,
-        minRPM: Int = 1200,
-        maxRPM: Int = 6000,
-        targetRPM: Int = 1800,
+        currentRPM: Int = 0,
+        minRPM: Int = 0,
+        maxRPM: Int = 0,
+        targetRPM: Int = 0,
         mode: FanMode = .automatic
     ) {
         self.fanIndex = fanIndex

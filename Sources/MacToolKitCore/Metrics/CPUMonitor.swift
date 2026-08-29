@@ -1,11 +1,38 @@
 import Foundation
 import Darwin
 
+public struct CPUPerformanceLevel: Sendable, Equatable {
+    public let name: String
+    public let logicalCoreCount: Int
+
+    public init(name: String, logicalCoreCount: Int) {
+        self.name = name
+        self.logicalCoreCount = logicalCoreCount
+    }
+}
+
+public enum CPUCoreTopology {
+    public static func labels(levels: [CPUPerformanceLevel], totalCoreCount: Int) -> [String] {
+        var labels = levels.flatMap { level in
+            Array(repeating: "\(level.name)*", count: max(0, level.logicalCoreCount))
+        }
+        if labels.count < totalCoreCount {
+            labels.append(contentsOf: Array(repeating: "未分類", count: totalCoreCount - labels.count))
+        }
+        return Array(labels.prefix(totalCoreCount))
+    }
+}
+
 public final class CPUMonitor: @unchecked Sendable {
     private var previousCPUTicks: [processor_cpu_load_info] = []
+    private let coreTypeLabels: [String]
     private let lock = NSLock()
 
     public init() {
+        self.coreTypeLabels = CPUCoreTopology.labels(
+            levels: Self.readPerformanceLevels(),
+            totalCoreCount: ProcessInfo.processInfo.activeProcessorCount
+        )
         if let initial = sampleCPUTicks() {
             self.previousCPUTicks = initial
             usleep(60_000) // 60ms initial delta seed
@@ -77,11 +104,14 @@ public final class CPUMonitor: @unchecked Sendable {
             let coreIdlePct = coreTotal > 0 ? (idleDelta / coreTotal) * 100.0 : 100.0
             let coreTotalPct = coreTotal > 0 ? (activeDelta / coreTotal) * 100.0 : 0
 
-            totalUserDelta += userDelta
+            // Mach's NICE bucket is active user work. Include it in the
+            // aggregate user percentage so user + system + idle remains 100%.
+            totalUserDelta += userDelta + niceDelta
             totalSystemDelta += sysDelta
             totalIdleDelta += idleDelta
             totalTicksDelta += coreTotal
 
+            let coreType = i < coreTypeLabels.count ? coreTypeLabels[i] : "未分類"
             coreUsages.append(CoreUsage(
                 id: i,
                 coreNumber: i + 1,
@@ -89,7 +119,8 @@ public final class CPUMonitor: @unchecked Sendable {
                 system: coreSysPct,
                 idle: coreIdlePct,
                 totalUsage: coreTotalPct,
-                isPerformanceCore: i < (current.count > 8 ? current.count - 4 : current.count)
+                isPerformanceCore: !coreType.localizedCaseInsensitiveContains("efficiency"),
+                coreTypeName: coreType
             ))
         }
 
@@ -104,9 +135,34 @@ public final class CPUMonitor: @unchecked Sendable {
             systemUsage: overallSys,
             idleUsage: overallIdle,
             cores: coreUsages,
-            physicalCores: ProcessInfo.processInfo.activeProcessorCount,
+            physicalCores: Self.sysctlInt("hw.physicalcpu") ?? current.count,
             logicalCores: current.count,
             timestamp: Date()
         )
+    }
+
+    private static func readPerformanceLevels() -> [CPUPerformanceLevel] {
+        var result: [CPUPerformanceLevel] = []
+        for index in 0..<8 {
+            guard let name = sysctlString("hw.perflevel\(index).name"),
+                  let count = sysctlInt("hw.perflevel\(index).logicalcpu"), count > 0 else { break }
+            result.append(CPUPerformanceLevel(name: name, logicalCoreCount: count))
+        }
+        return result
+    }
+
+    private static func sysctlString(_ name: String) -> String? {
+        var size = 0
+        guard sysctlbyname(name, nil, &size, nil, 0) == 0, size > 1 else { return nil }
+        var buffer = [CChar](repeating: 0, count: size)
+        guard sysctlbyname(name, &buffer, &size, nil, 0) == 0 else { return nil }
+        return String(cString: buffer)
+    }
+
+    private static func sysctlInt(_ name: String) -> Int? {
+        var value: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        guard sysctlbyname(name, &value, &size, nil, 0) == 0 else { return nil }
+        return Int(value)
     }
 }

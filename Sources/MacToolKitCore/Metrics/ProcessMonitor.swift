@@ -40,22 +40,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         }
     }
 
-    private func getAntigravityActiveModelName() -> String {
-        let stateUrl = URL(fileURLWithPath: NSHomeDirectory() + "/.gemini/antigravity/antigravity_state.pbtxt")
-        guard let content = try? String(contentsOf: stateUrl, encoding: .utf8) else { return "Gemini" }
-        for line in content.components(separatedBy: .newlines) {
-            if line.contains("last_selected_agent_model:") {
-                if line.contains("M132") { return "Gemini 3.7 Flash High" }
-                if line.contains("M16") { return "Gemini 3.1 Pro High" }
-                if line.contains("M131") { return "Gemini 3.7 Flash" }
-                if line.contains("M15") { return "Gemini 3.1 Pro" }
-                if line.contains("M11") { return "Gemini 2.5 Pro" }
-            }
-        }
-        return "Gemini"
-    }
-
-    public func sampleProcesses(limit: Int = 80) -> [ProcessItem] {
+    public func sampleProcesses(limit: Int? = nil) -> [ProcessItem] {
         lock.lock()
         defer { lock.unlock() }
 
@@ -85,7 +70,7 @@ public final class ProcessMonitor: @unchecked Sendable {
 
             let pidCount = Int(bytesUsed) / MemoryLayout<pid_t>.stride
             var results: [ProcessItem] = []
-            results.reserveCapacity(min(limit * 2, pidCount))
+            results.reserveCapacity(limit.map { min($0 * 2, pidCount) } ?? pidCount)
             var currentPids = Set<pid_t>()
 
             for i in 0..<pidCount {
@@ -177,7 +162,10 @@ public final class ProcessMonitor: @unchecked Sendable {
                 return $0.memoryBytes > $1.memoryBytes
             }
 
-            return Array(results.prefix(limit))
+            if let limit {
+                return Array(results.prefix(limit))
+            }
+            return results
         }
     }
 
@@ -189,7 +177,8 @@ public final class ProcessMonitor: @unchecked Sendable {
         let details = getProcessDetails(pid: pid)
         let execPath = details.path
         let args = details.args
-        let cmdSummary = args.isEmpty ? (execPath.isEmpty ? nil : execPath) : args.joined(separator: " ")
+        let rawCommand = args.isEmpty ? (execPath.isEmpty ? nil : execPath) : args.joined(separator: " ")
+        let cmdSummary = rawCommand.map(CommandLineRedactor.redact)
 
         let cwdInfo = getCWD(pid: pid, isGuiApp: isGuiApp)
         let triggerInfo = resolveTriggerApp(pid: pid)
@@ -216,7 +205,8 @@ public final class ProcessMonitor: @unchecked Sendable {
             projSuffix = ""
         }
         // 2. Claude Code
-        else if lowerRaw.contains("claude") || lowerPath.contains("claude") || lowerPath.contains(".local/share/claude") {
+        else if (lowerRaw.contains("claude") || lowerPath.contains(".local/share/claude"))
+            && !lowerPath.contains("/applications/claude.app/") {
             let pName = projName != nil ? " (\(projName!))" : ""
             friendly = "Claude Code\(pName)"
             category = .developer
@@ -356,7 +346,6 @@ public final class ProcessMonitor: @unchecked Sendable {
         // 1. Antigravity Agent
         if cwd.contains(".gemini/antigravity") || fullCmd.contains("antigravity") || chainStr.contains("antigravity") {
             tool = "Antigravity Agent"
-            model = getAntigravityActiveModelName()
             if let brainRange = cwd.range(of: "brain/") {
                 let sub = String(cwd[brainRange.upperBound...])
                 let comp = sub.components(separatedBy: "/")
@@ -366,12 +355,11 @@ public final class ProcessMonitor: @unchecked Sendable {
             }
         }
         // 2. Claude Code
-        else if fullCmd.contains("claude") || chainStr.contains("claude") || rawName.lowercased().contains("claude") {
+        else if !fullCmd.contains("/applications/claude.app/")
+            && (fullCmd.contains("claude") || chainStr.contains("claude code")) {
             tool = "Claude Code"
             if let mIdx = args.firstIndex(where: { $0 == "--model" || $0 == "-m" }), mIdx + 1 < args.count {
                 model = args[mIdx + 1]
-            } else {
-                model = "claude-3-7-sonnet"
             }
             if let sIdx = args.firstIndex(where: { $0 == "--session-id" || $0 == "--session" }), sIdx + 1 < args.count {
                 sessionId = args[sIdx + 1]
@@ -381,37 +369,37 @@ public final class ProcessMonitor: @unchecked Sendable {
                 sessionId = proj.replacingOccurrences(of: "工作區 ", with: "")
             }
         }
-        // 3. Ollama / Local LLM
+        // 3. OpenAI Codex
+        else if fullCmd.contains("/codex") || rawName.lowercased() == "codex" || chainStr.contains("codex") {
+            tool = "OpenAI Codex"
+            if let sIdx = args.firstIndex(where: { $0 == "--session-id" || $0 == "--session" }), sIdx + 1 < args.count {
+                sessionId = args[sIdx + 1]
+            }
+        }
+        // 4. Ollama / Local LLM
         else if rawName.lowercased() == "ollama" || fullCmd.contains("ollama run") || fullCmd.contains("llama-server") {
             tool = "Ollama / Local LLM"
             if let rIdx = args.firstIndex(of: "run"), rIdx + 1 < args.count {
                 model = args[rIdx + 1]
             } else if let mIdx = args.firstIndex(where: { $0 == "-m" || $0 == "--model" }), mIdx + 1 < args.count {
                 model = URL(fileURLWithPath: args[mIdx + 1]).lastPathComponent
-            } else {
-                model = "Local LLM"
             }
         }
-        // 4. Cursor AI
+        // 5. Cursor AI
         else if chainStr.contains("cursor") || fullCmd.contains("cursor") {
             tool = "Cursor AI"
             if let mIdx = args.firstIndex(where: { $0 == "--model" }), mIdx + 1 < args.count {
                 model = args[mIdx + 1]
-            } else {
-                model = "Claude 3.5 Sonnet"
             }
         }
-        // 5. Parent trigger contains AI
-        else if let trigger = triggerInfo.app, trigger.contains("Claude") || trigger.contains("Antigravity") || trigger.contains("Cursor") {
-            if trigger.contains("Claude") {
+        // 6. Parent trigger contains AI
+        else if let trigger = triggerInfo.app, trigger.contains("Claude Code") || trigger.contains("Antigravity") || trigger.contains("Cursor") {
+            if trigger.contains("Claude Code") {
                 tool = "Claude Code"
-                model = "claude-3-7-sonnet"
             } else if trigger.contains("Antigravity") {
                 tool = "Antigravity Agent"
-                model = getAntigravityActiveModelName()
             } else {
                 tool = "Cursor AI"
-                model = "Claude 3.5 Sonnet"
             }
             if let proj = cwdInfo.project, proj.contains("工作區") {
                 sessionId = proj.replacingOccurrences(of: "工作區 ", with: "")
@@ -512,6 +500,16 @@ public final class ProcessMonitor: @unchecked Sendable {
 
                 // If CWD is user home, generic system directory, or a top-level GUI app, do not treat as a project workspace
                 if cwd == homeDir || cwd == "/Users/\(currentUserName)" || isGuiApp {
+                    return (cwd, nil)
+                }
+
+                for marker in ["/.claude/worktrees/", "/.codex/worktrees/"] {
+                    if let range = cwd.range(of: marker) {
+                        let root = String(cwd[..<range.lowerBound])
+                        return (cwd, URL(fileURLWithPath: root).lastPathComponent)
+                    }
+                }
+                if cwd.hasPrefix(homeDir + "/.claude/") || cwd.hasPrefix(homeDir + "/.codex/") {
                     return (cwd, nil)
                 }
 
@@ -642,57 +640,86 @@ public final class ProcessMonitor: @unchecked Sendable {
             return []
         }
 
+        guard let statsOutput = Self.runDocker(
+            at: dockerPath,
+            arguments: ["stats", "--no-stream", "--format", "{{json .}}"]
+        ) else { return [] }
+        let psOutput = Self.runDocker(
+            at: dockerPath,
+            arguments: ["ps", "--no-trunc", "--format", "{{json .}}"]
+        ) ?? ""
+
+        let containers = Self.parseDockerContainers(statsOutput: statsOutput, psOutput: psOutput)
+        self.cachedDockerContainers = containers
+        self.lastDockerSampleTime = now
+        return containers
+    }
+
+    static func parseDockerContainers(statsOutput: String, psOutput: String) -> [DockerContainerInfo] {
+        let metadataRows = dockerJSONLines(psOutput)
+        var metadataByKey: [String: [String: Any]] = [:]
+        for row in metadataRows {
+            if let fullID = row["ID"] as? String {
+                metadataByKey[fullID] = row
+                metadataByKey[String(fullID.prefix(12))] = row
+            }
+            if let name = row["Names"] as? String {
+                metadataByKey[name] = row
+            }
+        }
+
+        return dockerJSONLines(statsOutput).map { stats in
+            let fullID = (stats["Container"] as? String) ?? (stats["ID"] as? String) ?? "不可取得"
+            let shortID = (stats["ID"] as? String) ?? String(fullID.prefix(12))
+            let name = (stats["Name"] as? String) ?? shortID
+            let metadata = metadataByKey[fullID] ?? metadataByKey[shortID] ?? metadataByKey[name]
+            let cpuString = (stats["CPUPerc"] as? String) ?? "0.0%"
+            let memoryPercentageString = (stats["MemPerc"] as? String) ?? "0.0%"
+
+            return DockerContainerInfo(
+                containerId: shortID,
+                name: name,
+                image: (metadata?["Image"] as? String) ?? "",
+                cpuPercentage: percentageValue(cpuString),
+                memoryUsage: (stats["MemUsage"] as? String) ?? "不可取得",
+                memoryPercentage: percentageValue(memoryPercentageString),
+                status: (metadata?["Status"] as? String)
+                    ?? (metadata?["State"] as? String)
+                    ?? "不可取得",
+                runningFor: (metadata?["RunningFor"] as? String) ?? "",
+                command: (metadata?["Command"] as? String).map(CommandLineRedactor.redact) ?? ""
+            )
+        }
+    }
+
+    private static func dockerJSONLines(_ output: String) -> [[String: Any]] {
+        output.components(separatedBy: "\n").compactMap { line in
+            guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let data = line.data(using: .utf8) else { return nil }
+            return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        }
+    }
+
+    private static func percentageValue(_ value: String) -> Double {
+        Double(value.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
+    private static func runDocker(at path: String, arguments: [String]) -> String? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: dockerPath)
-        process.arguments = ["stats", "--no-stream", "--format", "{{json .}}"]
         let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = arguments
         process.standardOutput = pipe
         process.standardError = Pipe()
 
         do {
             try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else { return [] }
-
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            guard let output = String(data: data, encoding: .utf8) else { return [] }
-
-            var containers: [DockerContainerInfo] = []
-            let lines = output.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-
-            for line in lines {
-                guard let jsonData = line.data(using: .utf8),
-                      let dict = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-                    continue
-                }
-
-                let id = (dict["ID"] as? String) ?? (dict["Container"] as? String) ?? "unknown"
-                let name = (dict["Name"] as? String) ?? id
-                let cpuStr = (dict["CPUPerc"] as? String) ?? "0.0%"
-                let memStr = (dict["MemUsage"] as? String) ?? "0 B"
-                let memPercStr = (dict["MemPerc"] as? String) ?? "0.0%"
-
-                let cpuVal = Double(cpuStr.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)) ?? 0.0
-                let memPercVal = Double(memPercStr.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)) ?? 0.0
-
-                containers.append(DockerContainerInfo(
-                    containerId: id,
-                    name: name,
-                    image: (dict["Container"] as? String) ?? "",
-                    cpuPercentage: cpuVal,
-                    memoryUsage: memStr,
-                    memoryPercentage: memPercVal,
-                    status: "running",
-                    runningFor: "",
-                    command: ""
-                ))
-            }
-
-            self.cachedDockerContainers = containers
-            self.lastDockerSampleTime = now
-            return containers
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            return String(data: data, encoding: .utf8)
         } catch {
-            return []
+            return nil
         }
     }
 

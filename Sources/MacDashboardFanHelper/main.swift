@@ -1,47 +1,14 @@
 import Foundation
 import IOKit
+import MacToolKitHardwareABI
 
 // MARK: - SMC Data Structures (Exact 80 bytes for Apple SMC)
-
-public struct SMCVersion {
-    var major: UInt8 = 0
-    var minor: UInt8 = 0
-    var build: UInt8 = 0
-    var reserved: UInt8 = 0
-    var release: UInt16 = 0
-}
-
-public struct SMCPLimitData {
-    var version: UInt16 = 0
-    var length: UInt16 = 0
-    var cpuPLimit: UInt32 = 0
-    var gpuPLimit: UInt32 = 0
-    var memPLimit: UInt32 = 0
-}
-
-public struct SMCKeyInfoData {
-    var dataSize: UInt32 = 0
-    var dataType: UInt32 = 0
-    var dataAttributes: UInt8 = 0
-}
-
-public struct SMCKeyData_t {
-    var key: UInt32 = 0
-    var vers: SMCVersion = SMCVersion()
-    var pLimitData: SMCPLimitData = SMCPLimitData()
-    var keyInfo: SMCKeyInfoData = SMCKeyInfoData()
-    var result: UInt8 = 0
-    var status: UInt8 = 0
-    var data8: UInt8 = 0
-    var data32: UInt32 = 0
-    var bytes: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-                UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8) =
-        (0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
-}
 
 final class SMCHardwareController: @unchecked Sendable {
     private var connection: io_connect_t = 0
     private let lock = NSLock()
+    private var cachedTemperatureKeys: [String]?
+    private let verboseProbe = CommandLine.arguments.contains("--probe-readonly")
 
     init() {
         openConnection()
@@ -97,6 +64,16 @@ final class SMCHardwareController: @unchecked Sendable {
         return res
     }
 
+    private func stringFromFourCharCode(_ code: UInt32) -> String {
+        let bytes: [UInt8] = [
+            UInt8((code >> 24) & 0xff),
+            UInt8((code >> 16) & 0xff),
+            UInt8((code >> 8) & 0xff),
+            UInt8(code & 0xff)
+        ]
+        return String(bytes: bytes, encoding: .ascii) ?? ""
+    }
+
     func readKey(_ keyStr: String) -> (type: String, bytes: [UInt8])? {
         lock.lock()
         defer { lock.unlock() }
@@ -104,29 +81,39 @@ final class SMCHardwareController: @unchecked Sendable {
         if connection == 0 { openConnection() }
         guard connection != 0 else { return nil }
 
-        var input = SMCKeyData_t()
-        var output = SMCKeyData_t()
+        var input = SMCKeyData()
+        var output = SMCKeyData()
         input.key = fourCharCode(keyStr)
         input.data8 = 9 // SMC_CMD_READ_KEYINFO
 
-        let inSize = MemoryLayout<SMCKeyData_t>.size
-        var outSize = MemoryLayout<SMCKeyData_t>.size
+        let inSize = MemoryLayout<SMCKeyData>.size
+        var outSize = MemoryLayout<SMCKeyData>.size
 
         var kr = IOConnectCallStructMethod(connection, 2, &input, inSize, &output, &outSize)
-        guard kr == KERN_SUCCESS && output.result == 0 else { return nil }
-
-        input.keyInfo = output.keyInfo
+        guard kr == KERN_SUCCESS && output.result == 0 else {
+            if verboseProbe {
+                print("[SMCHelperProbe] keyInfo \(keyStr) failed: kr=\(kr) smc=\(output.result) size=\(inSize)/\(outSize)")
+            }
+            return nil
+        }
+        let keyInfo = output.keyInfo
+        input.keyInfo.dataSize = keyInfo.dataSize
         input.data8 = 5 // SMC_CMD_READ_BYTES
 
         kr = IOConnectCallStructMethod(connection, 2, &input, inSize, &output, &outSize)
-        guard kr == KERN_SUCCESS && output.result == 0 else { return nil }
+        guard kr == KERN_SUCCESS && output.result == 0 else {
+            if verboseProbe {
+                print("[SMCHelperProbe] read \(keyStr) failed: kr=\(kr) smc=\(output.result) size=\(inSize)/\(outSize)")
+            }
+            return nil
+        }
 
         var typeChars = [CChar](repeating: 0, count: 5)
-        var typeBE = output.keyInfo.dataType.bigEndian
+        var typeBE = keyInfo.dataType.bigEndian
         memcpy(&typeChars, &typeBE, 4)
         let typeStr = String(cString: typeChars)
 
-        let dataSize = Int(output.keyInfo.dataSize)
+        let dataSize = Int(keyInfo.dataSize)
         var byteArr = [UInt8]()
         withUnsafeBytes(of: output.bytes) { raw in
             for i in 0..<min(dataSize, 32) {
@@ -143,18 +130,18 @@ final class SMCHardwareController: @unchecked Sendable {
         if connection == 0 { openConnection() }
         guard connection != 0 else { return false }
 
-        var input = SMCKeyData_t()
-        var output = SMCKeyData_t()
+        var input = SMCKeyData()
+        var output = SMCKeyData()
         input.key = fourCharCode(keyStr)
         input.data8 = 9 // SMC_CMD_READ_KEYINFO
 
-        let inSize = MemoryLayout<SMCKeyData_t>.size
-        var outSize = MemoryLayout<SMCKeyData_t>.size
+        let inSize = MemoryLayout<SMCKeyData>.size
+        var outSize = MemoryLayout<SMCKeyData>.size
 
         var kr = IOConnectCallStructMethod(connection, 2, &input, inSize, &output, &outSize)
         guard kr == KERN_SUCCESS && output.result == 0 else { return false }
 
-        input.keyInfo = output.keyInfo
+        input.keyInfo.dataSize = output.keyInfo.dataSize
         input.data8 = 6 // SMC_CMD_WRITE_BYTES
 
         var copyBytes = output.bytes
@@ -186,11 +173,63 @@ final class SMCHardwareController: @unchecked Sendable {
         } else if type == "ui16" && bytes.count >= 2 {
             let raw = (Int(bytes[0]) << 8) | Int(bytes[1])
             return Double(raw)
+        } else if type == "ui32" && bytes.count >= 4 {
+            let raw = (UInt32(bytes[0]) << 24) |
+                (UInt32(bytes[1]) << 16) |
+                (UInt32(bytes[2]) << 8) |
+                UInt32(bytes[3])
+            return Double(raw)
         } else if type == "sp78" && bytes.count >= 2 {
             let raw = (Int(Int8(bitPattern: bytes[0])) << 8) | Int(bytes[1])
             return Double(raw) / 256.0
         }
         return nil
+    }
+
+    private func keyAtIndex(_ index: UInt32) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if connection == 0 { openConnection() }
+        guard connection != 0 else { return nil }
+
+        var input = SMCKeyData()
+        var output = SMCKeyData()
+        input.data8 = 8 // SMC_CMD_READ_INDEX
+        input.data32 = index
+
+        let inSize = MemoryLayout<SMCKeyData>.size
+        var outSize = MemoryLayout<SMCKeyData>.size
+        let result = IOConnectCallStructMethod(connection, 2, &input, inSize, &output, &outSize)
+        guard result == KERN_SUCCESS, output.result == 0 else { return nil }
+        let key = stringFromFourCharCode(output.key)
+        return key.utf8.count == 4 ? key : nil
+    }
+
+    private func temperatureKeys() -> [String] {
+        if let cachedTemperatureKeys { return cachedTemperatureKeys }
+        guard let countValue = readNumericKey("#KEY") else { return [] }
+        let count = min(max(0, Int(countValue)), 20_000)
+        var keys: [String] = []
+        keys.reserveCapacity(min(count, 512))
+        for index in 0..<count {
+            guard let key = keyAtIndex(UInt32(index)) else { continue }
+            let prefix = String(key.prefix(2))
+            if prefix == "Tp" || prefix == "Tg" || prefix == "Tm" {
+                keys.append(key)
+                if keys.count == 512 { break }
+            }
+        }
+        cachedTemperatureKeys = keys
+        return keys
+    }
+
+    func getTemperatureSamples() -> [[String: Any]] {
+        temperatureKeys().compactMap { key in
+            guard let value = readNumericKey(key),
+                  value.isFinite, value > 0, value <= 110 else { return nil }
+            return ["key": key, "value": value]
+        }
     }
 
     func writeFloatKey(_ keyStr: String, value: Float32) -> Bool {
@@ -212,19 +251,34 @@ final class SMCHardwareController: @unchecked Sendable {
 
     func getFanCount() -> Int {
         if let count = readNumericKey("FNum") {
-            return max(1, Int(count))
+            let parsed = Int(count)
+            return (1...16).contains(parsed) ? parsed : 0
         }
-        return 2
+        return 0
     }
 
-    func getFanStatus(index: Int) -> [String: Any] {
-        let actualRPM = readNumericKey("F\(index)Ac") ?? 0
-        let minRPM = readNumericKey("F\(index)Mn") ?? 1200
-        let maxRPM = readNumericKey("F\(index)Mx") ?? 6200
-        let targetRPM = readNumericKey("F\(index)Tg") ?? actualRPM
-        let modeVal = readNumericKey("F\(index)md") ?? readNumericKey("F\(index)Md") ?? 0
+    private func fanModeKey(index: Int) -> String? {
+        let lower = "F\(index)md"
+        if readKey(lower) != nil { return lower }
+        let upper = "F\(index)Md"
+        return readKey(upper) != nil ? upper : nil
+    }
 
-        let name = index == 0 ? "左側風扇 (Fan 1)" : "右側風扇 (Fan 2)"
+    func getFanStatus(index: Int) -> [String: Any]? {
+        guard (0..<getFanCount()).contains(index),
+              let actualRPM = readNumericKey("F\(index)Ac"), actualRPM >= 0,
+              let minRPM = readNumericKey("F\(index)Mn"), minRPM > 0,
+              let maxRPM = readNumericKey("F\(index)Mx"), maxRPM >= minRPM,
+              let targetRPM = readNumericKey("F\(index)Tg"), targetRPM >= 0,
+              let modeKey = fanModeKey(index: index),
+              let modeVal = readNumericKey(modeKey) else { return nil }
+
+        let name: String
+        if getFanCount() == 2 {
+            name = index == 0 ? "左側風扇 (Left)" : "右側風扇 (Right)"
+        } else {
+            name = "風扇 \(index + 1) (Fan \(index + 1))"
+        }
         return [
             "index": index,
             "name": name,
@@ -236,28 +290,39 @@ final class SMCHardwareController: @unchecked Sendable {
         ]
     }
 
-    func setFanTarget(index: Int, rpm: Int) -> Bool {
-        // Set manual mode on F0md / F0Md
-        _ = writeKey("F\(index)md", bytes: [1])
-        _ = writeKey("F\(index)Md", bytes: [1])
-
-        // Write target RPM
-        var success = writeFloatKey("F\(index)Tg", value: Float32(rpm))
-        if !success {
-            var val = Float32(rpm)
-            var bytes = [UInt8](repeating: 0, count: 4)
-            withUnsafeBytes(of: &val) { raw in
-                for i in 0..<4 { bytes[i] = raw[i] }
-            }
-            success = writeKey("F\(index)Tg", bytes: bytes)
+    func setFanTarget(index: Int, rpm: Int) -> (success: Bool, targetReadback: Int, modeReadback: Int) {
+        let fanCount = getFanCount()
+        guard (0..<fanCount).contains(index),
+              let minRPM = readNumericKey("F\(index)Mn"),
+              let maxRPM = readNumericKey("F\(index)Mx"),
+              FanCommandSafety.allows(
+                index: index,
+                rpm: rpm,
+                fanCount: fanCount,
+                minRPM: Int(minRPM),
+                maxRPM: Int(maxRPM)
+              ),
+              let modeKey = fanModeKey(index: index),
+              writeKey(modeKey, bytes: [1]),
+              writeFloatKey("F\(index)Tg", value: Float32(rpm)) else {
+            return (false, -1, -1)
         }
-        return success
+
+        usleep(50_000)
+        let target = Int(readNumericKey("F\(index)Tg") ?? -1)
+        let mode = Int(readNumericKey(modeKey) ?? -1)
+        return (abs(target - rpm) <= 1 && mode == 1, target, mode)
     }
 
-    func setFanAuto(index: Int) -> Bool {
-        let ok1 = writeKey("F\(index)md", bytes: [0])
-        let ok2 = writeKey("F\(index)Md", bytes: [0])
-        return ok1 || ok2
+    func setFanAuto(index: Int) -> (success: Bool, modeReadback: Int) {
+        guard (0..<getFanCount()).contains(index),
+              let modeKey = fanModeKey(index: index),
+              writeKey(modeKey, bytes: [0]) else {
+            return (false, -1)
+        }
+        usleep(50_000)
+        let mode = Int(readNumericKey(modeKey) ?? -1)
+        return (mode == 0 || mode == 3, mode)
     }
 }
 
@@ -301,7 +366,13 @@ final class FanHelperServer {
             fatalError("[SMCHelper] Failed to bind socket to \(socketPath): \(errno)")
         }
 
-        chmod(socketPath, 0o666)
+        // Restrict write-capable IPC to local administrators instead of every user.
+        guard chown(socketPath, 0, 80) == 0 else { // root:admin on macOS
+            fatalError("[SMCHelper] Failed to set socket ownership: \(errno)")
+        }
+        guard chmod(socketPath, 0o660) == 0 else {
+            fatalError("[SMCHelper] Failed to restrict socket permissions: \(errno)")
+        }
 
         guard listen(serverFd, 16) == 0 else {
             fatalError("[SMCHelper] Failed to listen on socket: \(errno)")
@@ -326,8 +397,15 @@ final class FanHelperServer {
             let data = Data(buffer[0..<bytesRead])
             let response = processRequest(data)
             if let respData = response.data(using: .utf8) {
-                _ = respData.withUnsafeBytes { raw in
-                    write(clientFd, raw.baseAddress, respData.count)
+                _ = respData.withUnsafeBytes { raw -> Bool in
+                    guard let base = raw.baseAddress else { return false }
+                    var written = 0
+                    while written < respData.count {
+                        let result = write(clientFd, base.advanced(by: written), respData.count - written)
+                        guard result > 0 else { return false }
+                        written += result
+                    }
+                    return true
                 }
             }
         }
@@ -342,13 +420,19 @@ final class FanHelperServer {
 
         switch cmd {
         case "ping":
-            return "{\"success\":true,\"message\":\"pong\",\"version\":\"1.0.0\"}\n"
+            return "{\"success\":true,\"message\":\"pong\",\"version\":\"1.1.0\"}\n"
 
         case "get_fans":
             let count = controller.getFanCount()
+            guard count > 0 else {
+                return "{\"success\":false,\"error\":\"FNum unavailable or no fans reported\"}\n"
+            }
             var fanList = [[String: Any]]()
             for i in 0..<count {
-                fanList.append(controller.getFanStatus(index: i))
+                guard let status = controller.getFanStatus(index: i) else {
+                    return "{\"success\":false,\"error\":\"Fan telemetry incomplete\"}\n"
+                }
+                fanList.append(status)
             }
             let resp: [String: Any] = ["success": true, "fans": fanList]
             if let d = try? JSONSerialization.data(withJSONObject: resp), let s = String(data: d, encoding: .utf8) {
@@ -356,22 +440,42 @@ final class FanHelperServer {
             }
             return "{\"success\":false,\"error\":\"Serialization error\"}\n"
 
+        case "get_temperature_sensors":
+            let sensors = controller.getTemperatureSamples()
+            guard !sensors.isEmpty else {
+                return "{\"success\":false,\"error\":\"No attributable SMC temperature sensors\"}\n"
+            }
+            let response: [String: Any] = ["success": true, "sensors": sensors]
+            if let data = try? JSONSerialization.data(withJSONObject: response),
+               let string = String(data: data, encoding: .utf8) {
+                return string + "\n"
+            }
+            return "{\"success\":false,\"error\":\"Serialization error\"}\n"
+
         case "set_fan_target":
-            let index = json["fan"] as? Int ?? 0
-            let rpm = json["rpm"] as? Int ?? 2000
-            let ok = controller.setFanTarget(index: index, rpm: rpm)
-            return "{\"success\":\(ok),\"fan\":\(index),\"target\":\(rpm)}\n"
+            guard let index = json["fan"] as? Int,
+                  let rpm = json["rpm"] as? Int,
+                  index >= 0, rpm > 0 else {
+                return "{\"success\":false,\"error\":\"fan and positive rpm are required\"}\n"
+            }
+            let result = controller.setFanTarget(index: index, rpm: rpm)
+            return "{\"success\":\(result.success),\"fan\":\(index),\"target\":\(rpm),\"targetReadback\":\(result.targetReadback),\"modeReadback\":\(result.modeReadback)}\n"
 
         case "set_fan_auto":
-            let index = json["fan"] as? Int ?? 0
-            let ok = controller.setFanAuto(index: index)
-            return "{\"success\":\(ok),\"fan\":\(index),\"mode\":\"auto\"}\n"
+            guard let index = json["fan"] as? Int, index >= 0 else {
+                return "{\"success\":false,\"error\":\"fan is required\"}\n"
+            }
+            let result = controller.setFanAuto(index: index)
+            return "{\"success\":\(result.success),\"fan\":\(index),\"mode\":\"auto\",\"modeReadback\":\(result.modeReadback)}\n"
 
         case "set_all_auto":
             let count = controller.getFanCount()
+            guard count > 0 else {
+                return "{\"success\":false,\"error\":\"FNum unavailable or no fans reported\"}\n"
+            }
             var allOk = true
             for i in 0..<count {
-                if !controller.setFanAuto(index: i) {
+                if !controller.setFanAuto(index: i).success {
                     allOk = false
                 }
             }
@@ -385,5 +489,31 @@ final class FanHelperServer {
 
 // MARK: - Main Entry Point
 
-let server = FanHelperServer()
-server.start()
+if CommandLine.arguments.contains("--probe-readonly") {
+    let controller = SMCHardwareController()
+    let rawFNum = controller.readKey("FNum")
+    let count = controller.getFanCount()
+    let fans = (0..<count).compactMap { controller.getFanStatus(index: $0) }
+    let temperatures = controller.getTemperatureSamples()
+    let payload: [String: Any] = [
+        "success": !fans.isEmpty,
+        "smcPayloadBytes": MemoryLayout<SMCKeyData>.size,
+        "offsetKeyInfo": MemoryLayout<SMCKeyData>.offset(of: \.keyInfo) ?? -1,
+        "offsetResult": MemoryLayout<SMCKeyData>.offset(of: \.result) ?? -1,
+        "offsetData8": MemoryLayout<SMCKeyData>.offset(of: \.data8) ?? -1,
+        "offsetData32": MemoryLayout<SMCKeyData>.offset(of: \.data32) ?? -1,
+        "offsetBytes": MemoryLayout<SMCKeyData>.offset(of: \.bytes) ?? -1,
+        "fNumType": rawFNum?.type ?? "unavailable",
+        "fNumBytes": rawFNum?.bytes ?? [],
+        "fans": fans,
+        "temperatureSensors": temperatures
+    ]
+    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+       let string = String(data: data, encoding: .utf8) {
+        print(string)
+    }
+    exit(fans.isEmpty ? 1 : 0)
+} else {
+    let server = FanHelperServer()
+    server.start()
+}

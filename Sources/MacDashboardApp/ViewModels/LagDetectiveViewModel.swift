@@ -48,20 +48,16 @@ public final class LagDetectiveViewModel: ObservableObject {
         case "kill_cpu_hog", "kill_mem_hog":
             if let pid = action.pid {
                 dashboardVM.terminateProcess(pid: pid, force: true)
-                showFeedback("已執行：強制結束行程 (PID \(pid))")
+                showFeedback("已送出結束行程請求 (PID \(pid))；結果以重新取樣為準")
             }
         case "renice_cpu_hog":
             if let pid = action.pid {
                 dashboardVM.lowerProcessPriority(pid: pid)
-                showFeedback("已執行：降低行程優先權 (PID \(pid))")
+                showFeedback("已送出降低優先權請求 (PID \(pid))；結果見狀態訊息")
             }
-        case "purge_memory":
-            dashboardVM.purgeMemory()
-            showFeedback("已執行：釋放系統記憶體快取")
-        case "fan_max_cooling":
-            SMCBridge.shared.setFanMode(.maxCooling)
-            showFeedback("已啟動：強效冷卻全速散熱模式！")
-            dashboardVM.refreshAll()
+        case "open_memory_inspector":
+            dashboardVM.selectedTab = .memory
+            showFeedback("已打開記憶體排行；inactive pages 由 macOS 自動回收")
         default:
             break
         }

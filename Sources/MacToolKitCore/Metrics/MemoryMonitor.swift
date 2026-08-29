@@ -27,7 +27,8 @@ public final class MemoryMonitor: Sendable {
         let compressed = UInt64(vmStats.compressor_page_count) * pageSize
         let free = UInt64(vmStats.free_count) * pageSize
 
-        // Real used memory on macOS is active + wired + compressed
+        // Dashboard-derived use: active + wired + compressed. This is not the
+        // Activity Monitor memory-pressure metric.
         let used = active + wired + compressed
         let usedPercentage = totalPhysical > 0 ? (Double(used) / Double(totalPhysical)) * 100.0 : 0
 

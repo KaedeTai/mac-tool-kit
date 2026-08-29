@@ -4,6 +4,7 @@ import MacToolKitCore
 public struct LagDetectiveView: View {
     @ObservedObject var dashboardVM: DashboardViewModel
     @ObservedObject var lagVM: LagDetectiveViewModel
+    @State private var pendingDestructiveAction: RemediationAction?
 
     public var body: some View {
         ScrollView {
@@ -28,10 +29,10 @@ public struct LagDetectiveView: View {
                                 .animation(.easeInOut, value: lagVM.report.healthScore)
 
                             VStack(spacing: 2) {
-                                Text("\(lagVM.report.healthScore)")
+                                Text(lagVM.report.severity == .unknown ? "--" : "\(lagVM.report.healthScore)")
                                     .font(.system(size: 32, weight: .bold, design: .rounded))
                                     .foregroundColor(scoreColor(for: lagVM.report.healthScore))
-                                Text("健康評分")
+                                Text("規則分數（衍生）")
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
                             }
@@ -117,7 +118,11 @@ public struct LagDetectiveView: View {
                                     Spacer()
 
                                     Button {
-                                        lagVM.executeAction(action, dashboardVM: dashboardVM)
+                                        if action.isDestructive {
+                                            pendingDestructiveAction = action
+                                        } else {
+                                            lagVM.executeAction(action, dashboardVM: dashboardVM)
+                                        }
                                     } label: {
                                         Text(action.buttonTitle)
                                             .font(.system(size: 12, weight: .semibold))
@@ -144,7 +149,7 @@ public struct LagDetectiveView: View {
                             Image(systemName: "checkmark.seal.fill")
                                 .foregroundColor(.green)
                                 .font(.title3)
-                            Text("未發現任何硬體資源瓶頸，電腦運作非常順暢！")
+                            Text("目前規則未找到明顯瓶頸；不代表已排除所有卡頓原因。")
                                 .font(.system(size: 13))
                                 .foregroundColor(.secondary)
                             Spacer()
@@ -188,9 +193,30 @@ public struct LagDetectiveView: View {
                 lagVM.runDiagnosis(from: dashboardVM)
             }
         }
+        .confirmationDialog(
+            "確認執行會結束行程的修復？",
+            isPresented: Binding(
+                get: { pendingDestructiveAction != nil },
+                set: { if !$0 { pendingDestructiveAction = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            if let action = pendingDestructiveAction {
+                Button(action.buttonTitle, role: .destructive) {
+                    lagVM.executeAction(action, dashboardVM: dashboardVM)
+                    pendingDestructiveAction = nil
+                }
+                Button("取消", role: .cancel) { pendingDestructiveAction = nil }
+            }
+        } message: {
+            if let action = pendingDestructiveAction {
+                Text(action.explanation)
+            }
+        }
     }
 
     private func scoreColor(for score: Int) -> Color {
+        if lagVM.report.severity == .unknown { return .secondary }
         if score >= 85 {
             return .green
         } else if score >= 65 {

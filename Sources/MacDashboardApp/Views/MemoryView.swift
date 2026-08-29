@@ -13,53 +13,53 @@ public struct MemoryView: View {
                         HStack(spacing: 24) {
                             CircularGaugeView(
                                 percentage: dashboardVM.memorySnapshot.usedPercentage,
-                                title: "已使用記憶體",
-                                subtitle: "\(String(format: "%.1f", Double(dashboardVM.memorySnapshot.usedBytes) / (1024*1024*1024))) / \(String(format: "%.0f", Double(dashboardVM.memorySnapshot.totalPhysicalBytes) / (1024*1024*1024))) GB",
+                                title: "Dashboard 使用量（衍生）",
+                                subtitle: "\(String(format: "%.1f", Double(dashboardVM.memorySnapshot.usedBytes) / (1024*1024*1024))) / \(String(format: "%.0f", Double(dashboardVM.memorySnapshot.totalPhysicalBytes) / (1024*1024*1024))) GiB",
                                 iconName: "memorychip",
                                 size: 110
                             )
 
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack {
-                                    Text("已使用記憶體比例:").foregroundColor(.secondary)
+                                    Text("使用量（active + wired + compressed）:").foregroundColor(.secondary)
                                     Spacer(minLength: 16)
                                     Text(String(format: "%.1f%%", dashboardVM.memorySnapshot.usedPercentage))
                                         .font(.system(size: 13, weight: .bold))
                                 }
 
                                 HStack {
-                                    Text("記憶體壓力狀態:").foregroundColor(.secondary)
+                                    Text("Dashboard 衍生壓力:").foregroundColor(.secondary)
                                     Spacer(minLength: 16)
                                     StatBadge(
                                         text: dashboardVM.memorySnapshot.pressureState.rawValue,
                                         iconName: dashboardVM.memorySnapshot.pressureState == .normal ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                                         color: dashboardVM.memorySnapshot.pressureState == .normal ? .green : .red
                                     )
+                                    .help("衍生規則：使用比例與 swap 門檻；不是 macOS Activity Monitor 的官方 Memory Pressure 圖")
                                 }
 
                                 HStack {
                                     Text("交換空間 (Swap):").foregroundColor(.secondary)
                                     Spacer(minLength: 16)
-                                    Text("\(String(format: "%.2f", Double(dashboardVM.memorySnapshot.swapUsedBytes) / (1024*1024*1024))) GB / \(String(format: "%.2f", Double(dashboardVM.memorySnapshot.swapTotalBytes) / (1024*1024*1024))) GB")
+                                    Text("\(String(format: "%.2f", Double(dashboardVM.memorySnapshot.swapUsedBytes) / (1024*1024*1024))) GiB / \(String(format: "%.2f", Double(dashboardVM.memorySnapshot.swapTotalBytes) / (1024*1024*1024))) GiB")
                                         .font(.system(size: 12, weight: .semibold))
                                 }
 
-                                Button {
-                                    dashboardVM.purgeMemory()
-                                } label: {
-                                    HStack(spacing: 6) {
-                                        Image(systemName: "sparkles")
-                                        Text("一鍵釋放系統快取 (Purge RAM)")
+                                HStack(alignment: .top, spacing: 7) {
+                                    Image(systemName: "arrow.triangle.2.circlepath")
+                                        .foregroundColor(.green)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("非活躍頁面由 macOS 自動回收")
+                                            .font(.system(size: 11, weight: .semibold))
+                                        Text("不提供假的 RAM 清理按鈕：purge 只清 disk buffer cache，不能把下方 inactive pages 手動清零。")
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                            .fixedSize(horizontal: false, vertical: true)
                                     }
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 7)
-                                    .background(Color.purple)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(8)
                                 }
-                                .buttonStyle(.plain)
-                                .help("清除系統磁碟緩衝區與釋放使用者空間快取記憶體")
+                                .padding(8)
+                                .background(Color.green.opacity(0.08))
+                                .cornerRadius(6)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .font(.system(size: 13))
@@ -94,12 +94,16 @@ public struct MemoryView: View {
 
                             // Legend with percentages
                             let total = max(1.0, Double(dashboardVM.memorySnapshot.totalPhysicalBytes))
-                            HStack(spacing: 10) {
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 170), alignment: .leading)],
+                                alignment: .leading,
+                                spacing: 8
+                            ) {
                                 LegendItem(color: .blue, label: "活躍", value: "\(formatMemory(dashboardVM.memorySnapshot.activeBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.activeBytes) / total * 100)))")
                                 LegendItem(color: .red, label: "聯動", value: "\(formatMemory(dashboardVM.memorySnapshot.wiredBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.wiredBytes) / total * 100)))")
                                 LegendItem(color: .purple, label: "壓縮", value: "\(formatMemory(dashboardVM.memorySnapshot.compressedBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.compressedBytes) / total * 100)))")
-                                LegendItem(color: .orange, label: "非活躍", value: "\(formatMemory(dashboardVM.memorySnapshot.inactiveBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.inactiveBytes) / total * 100)))")
-                                LegendItem(color: .green, label: "可用", value: "\(formatMemory(dashboardVM.memorySnapshot.freeBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.freeBytes) / total * 100)))")
+                                LegendItem(color: .orange, label: "非活躍（系統可回收）", value: "\(formatMemory(dashboardVM.memorySnapshot.inactiveBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.inactiveBytes) / total * 100)))")
+                                LegendItem(color: .green, label: "Free pages", value: "\(formatMemory(dashboardVM.memorySnapshot.freeBytes)) (\(String(format: "%.1f%%", Double(dashboardVM.memorySnapshot.freeBytes) / total * 100)))")
                             }
                             .font(.system(size: 11))
                         }
@@ -254,7 +258,7 @@ public struct MemoryView: View {
                                     Text("• SSD 虛擬交換空間 (Swap 換出至硬碟):")
                                         .foregroundColor(.orange)
                                     Spacer()
-                                    Text(String(format: "%.2f GB (已換出至 SSD)", Double(dashboardVM.memorySnapshot.swapUsedBytes) / (1024*1024*1024)))
+                                    Text(String(format: "%.2f GiB（已換出至 SSD）", Double(dashboardVM.memorySnapshot.swapUsedBytes) / (1024*1024*1024)))
                                         .font(.system(size: 12, weight: .semibold))
                                         .foregroundColor(.orange)
                                 }
@@ -274,9 +278,9 @@ public struct MemoryView: View {
     private func formatMemory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / (1024 * 1024)
         if mb >= 1024 {
-            return String(format: "%.2f GB", mb / 1024)
+            return String(format: "%.2f GiB", mb / 1024)
         } else {
-            return String(format: "%.0f MB", mb)
+            return String(format: "%.0f MiB", mb)
         }
     }
 }

@@ -4,7 +4,11 @@ set -e
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 cd "$DIR"
 
-VERSION="1.0.0"
+VERSION="${VERSION:-$(tr -d '[:space:]' < "$DIR/VERSION")}"
+if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Invalid VERSION: $VERSION" >&2
+    exit 1
+fi
 DMG_NAME="MacDashboard-v${VERSION}-macOS.dmg"
 ZIP_NAME="MacDashboard-v${VERSION}-macOS.zip"
 DIST_DIR="$DIR/dist"
@@ -24,9 +28,9 @@ cp -R "$DIR/MacDashboard.app" "$STAGING_DIR/"
 ln -s /Applications "$STAGING_DIR/Applications"
 
 # Add User-friendly Installation & Usage Guide
-cat << 'GUIDE' > "$STAGING_DIR/📖 安裝與使用說明.txt"
+cat << GUIDE > "$STAGING_DIR/📖 安裝與使用說明.txt"
 ======================================================
-  MacDashboard (macOS 頂級全能監控與智慧溫控工具箱)
+  MacDashboard v$VERSION（可追溯資料來源的 macOS 運作監控臺）
 ======================================================
 
 【安裝方式】：
@@ -35,10 +39,12 @@ cat << 'GUIDE' > "$STAGING_DIR/📖 安裝與使用說明.txt"
 3. 首次開啟時，若 macOS 提示安全性保護，請至「系統設定」>「隱私權與安全性」點擊「仍要打開」。
 
 【功能特色】：
-• 8 大核心硬體即時溫度（Apple Silicon SoC、CPU、GPU、ANE、統一記憶體、掌托電池、散熱鰭片、SSD）。
-• 智慧閉迴路自訂元件溫控（支援掌托降溫、SoC 壓溫、手動固定轉速）。
-• LagDetective 卡頓偵探（智慧追蹤 Lag 根因並提供一鍵解決方案）。
-• 磁碟、網路、記憶體、CPU 多核心、Docker 與程序深度監控。
+• 溫度頁只顯示本機可驗證的具名感測來源；不同 Mac 可取得的來源數量可能不同。
+• 顯示風扇實際 RPM；手動控制需安裝專用 helper，且寫入後必須有硬體讀回值才算成功。
+• AI 工作分析以專案 → 主 Session → 子 Session 呈現，區分 Active、Recent 24h 與永久 History。
+• 費用只在有模型與 token 證據時提供「API 等價估算」，不是實際帳單或訂閱扣款。
+• 磁碟組成採具名路徑實測，清理前逐項勾選並再次確認；Docker 資料獨立呈現。
+• CPU、RAM、網路、Docker、Lag 診斷與程序資料均附來源邊界，不以猜測值補空白。
 
 祝您使用愉快！
 GUIDE

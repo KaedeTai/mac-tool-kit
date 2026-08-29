@@ -53,7 +53,13 @@ final class LagDetectiveTests: XCTestCase {
 
         let report = detective.diagnose(cpu: cpu, memory: memory, processes: [], batteryThermal: bt, diskIO: dIO)
         XCTAssertLessThan(report.healthScore, 60)
-        XCTAssertTrue(report.suggestedActions.contains(where: { $0.typeId == "purge_memory" }))
+        XCTAssertFalse(report.suggestedActions.contains(where: { $0.typeId == "purge_memory" }))
+        XCTAssertTrue(report.suggestedActions.contains(where: { $0.typeId == "open_memory_inspector" }))
+        XCTAssertTrue(
+            report.suggestedActions.contains(where: {
+                $0.explanation.contains("inactive") && $0.explanation.contains("自動回收")
+            })
+        )
     }
 
     func testThermalThrottlingDiagnosis() {
@@ -64,6 +70,84 @@ final class LagDetectiveTests: XCTestCase {
         let dIO = DiskIOSnapshot()
 
         let report = detective.diagnose(cpu: cpu, memory: memory, processes: [], batteryThermal: bt, diskIO: dIO)
-        XCTAssertTrue(report.suggestedActions.contains(where: { $0.typeId == "fan_max_cooling" }))
+        XCTAssertFalse(report.suggestedActions.contains(where: { $0.typeId == "fan_max_cooling" }))
+    }
+
+    func testMajorCauseCannotBeReportedAsSmooth() {
+        let process = ProcessItem(pid: 9001, name: "Compiler", cpuPercentage: 55, memoryBytes: 100)
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 30),
+            memory: MemoryUsageSnapshot(usedPercentage: 30),
+            processes: [process],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot()
+        )
+        XCTAssertNotEqual(report.severity, .smooth)
+        XCTAssertTrue(report.summary.contains("主要"))
+    }
+
+    func testDashboardNeverRecommendsTerminatingItself() {
+        let dashboard = ProcessItem(
+            pid: 9002,
+            name: "Mac Dashboard",
+            rawName: "MacDashboardApp",
+            bundleIdentifier: "com.peterting.mac-tool-kit.dashboard",
+            cpuPercentage: 90,
+            memoryBytes: 3 * 1024 * 1024 * 1024
+        )
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 50),
+            memory: MemoryUsageSnapshot(usedPercentage: 50),
+            processes: [dashboard],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot()
+        )
+        XCTAssertFalse(report.suggestedActions.contains { $0.pid == dashboard.pid })
+    }
+
+    func testMemoryActionReportsObservedUsageWithoutPromisingExactRelease() {
+        let observedBytes = UInt64(4 * 1024 * 1024 * 1024)
+        let process = ProcessItem(
+            pid: 9003,
+            name: "Docker Desktop",
+            cpuPercentage: 5,
+            memoryBytes: observedBytes
+        )
+
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 20),
+            memory: MemoryUsageSnapshot(usedPercentage: 85, pressureState: .warning),
+            processes: [process],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot()
+        )
+
+        guard let action = report.suggestedActions.first(where: { $0.pid == process.pid }) else {
+            return XCTFail("missing memory-hog action")
+        }
+        XCTAssertEqual(action.buttonTitle, "結束應用（目前佔用 4.0 GiB）")
+        XCTAssertTrue(action.explanation.contains("目前取樣"), action.explanation)
+        XCTAssertTrue(action.explanation.contains("不保證"), action.explanation)
+    }
+
+    func testNormalMemoryPressureDoesNotClassifyLargeProcessAsLagCause() {
+        let process = ProcessItem(
+            pid: 9004,
+            name: "Docker Desktop",
+            cpuPercentage: 5,
+            memoryBytes: 5 * 1024 * 1024 * 1024
+        )
+
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 20),
+            memory: MemoryUsageSnapshot(usedPercentage: 65, pressureState: .normal),
+            processes: [process],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot()
+        )
+
+        XCTAssertEqual(report.severity, .smooth)
+        XCTAssertTrue(report.causes.isEmpty)
+        XCTAssertTrue(report.suggestedActions.isEmpty)
     }
 }

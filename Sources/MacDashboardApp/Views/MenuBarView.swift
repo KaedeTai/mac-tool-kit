@@ -51,7 +51,7 @@ public struct MenuBarView: View {
                 Divider().frame(height: 30)
 
                 VStack(spacing: 4) {
-                    Text("\(dashboardVM.fanStatuses.first?.currentRPM ?? 1800)")
+                    Text(dashboardVM.fanStatuses.first.map { "\($0.currentRPM)" } ?? "N/A")
                         .font(.system(size: 16, weight: .bold, design: .rounded))
                         .foregroundColor(.blue)
                     Text("風扇 RPM")
@@ -82,15 +82,6 @@ public struct MenuBarView: View {
 
             // Quick Actions
             HStack(spacing: 8) {
-                Button {
-                    dashboardVM.purgeMemory()
-                } label: {
-                    Label("釋放 RAM", systemImage: "sparkles")
-                        .font(.system(size: 11))
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-
                 Button {
                     fanVM.selectMode(.maxCooling)
                 } label: {

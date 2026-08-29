@@ -20,14 +20,14 @@ public final class BatteryThermalMonitor: Sendable {
             var hasBattery = false
             var isCharging = false
             var isACConnected = true
-            var batteryPct = 100
-            var maxCapacity = 0
-            var designCapacity = 0
-            var cycleCount = 0
-            var healthPct: Double = 100.0
-            var batteryTempCelsius: Double = 32.0
-            var powerWattage: Double = 0.0
-            var timeRemainingMins = -1
+            var batteryPct: Int?
+            var maxCapacity: Int?
+            var designCapacity: Int?
+            var cycleCount: Int?
+            var healthPct: Double?
+            var batteryTempCelsius: Double?
+            var powerWattage: Double?
+            var timeRemainingMins: Int?
 
             // 1. Read IOPS info
             if let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
@@ -70,7 +70,7 @@ public final class BatteryThermalMonitor: Sendable {
                         if let maxCap = (dict["AppleRawMaxCapacity"] ?? dict["MaxCapacity"]) as? Int {
                             maxCapacity = maxCap
                         }
-                        if designCapacity > 0 && maxCapacity > 0 {
+                        if let designCapacity, let maxCapacity, designCapacity > 0, maxCapacity > 0 {
                             healthPct = min(100.0, (Double(maxCapacity) / Double(designCapacity)) * 100.0)
                         }
                         if let tempK10 = dict["Temperature"] as? Double {
@@ -80,11 +80,6 @@ public final class BatteryThermalMonitor: Sendable {
                             let battWatt = abs(amp * volt) / 1_000_000.0
                             if battWatt > 0.1 {
                                 powerWattage = battWatt
-                            } else if isACConnected {
-                                let cpuPct = CPUMonitor().sample().totalUsage
-                                powerWattage = 5.2 + (cpuPct * 0.35)
-                            } else {
-                                powerWattage = 0.0
                             }
                         }
                     }

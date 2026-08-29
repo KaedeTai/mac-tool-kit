@@ -8,9 +8,33 @@ public struct ProcessTableView: View {
 
     public var body: some View {
         VStack(spacing: 0) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.shield")
+                    Text("PID、CPU、RAM、啟動時間來自 macOS 行程資料；友善名稱、專案與觸發來源依執行檔、cwd 與父行程推導，可能顯示為未歸類。指令中的常見秘密格式會遮蔽。")
+                    Spacer(minLength: 12)
+                    Text("目前列出 \(dashboardVM.processes.count) 個可讀取行程")
+                        .font(.system(size: 10, design: .monospaced))
+                        .fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.shield")
+                        Text("PID、CPU、RAM、啟動時間來自 macOS 行程資料；名稱、專案與來源為推導值；指令秘密會遮蔽。")
+                    }
+                    Text("目前列出 \(dashboardVM.processes.count) 個可讀取行程")
+                        .font(.system(size: 10, design: .monospaced))
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .font(.system(size: 11))
+            .foregroundColor(.secondary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.07))
+
             // Filter Bar
-            HStack(spacing: 16) {
-                // Search field
+            VStack(spacing: 10) {
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.secondary)
@@ -29,54 +53,68 @@ public struct ProcessTableView: View {
                 .padding(8)
                 .background(Color(nsColor: .controlBackgroundColor))
                 .cornerRadius(8)
-                .frame(maxWidth: 320)
+                .frame(maxWidth: .infinity)
 
-                Toggle("僅顯示使用者 App", isOn: $dashboardVM.onlyUserApps)
-                    .font(.system(size: 13))
+                HStack(spacing: 12) {
+                    Toggle("僅顯示使用者 App", isOn: $dashboardVM.onlyUserApps)
+                        .font(.system(size: 13))
 
-                Spacer()
+                    Spacer()
 
-                // Sort Segmented Control
-                Picker("排序依據", selection: $dashboardVM.processSortByCPU) {
-                    Text("CPU 佔用").tag(true)
-                    Text("RAM 佔用").tag(false)
+                    Text("排序依據")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.secondary)
+
+                    Picker("排序依據", selection: $dashboardVM.processSortByCPU) {
+                        Text("CPU 佔用").tag(true)
+                        Text("RAM 佔用").tag(false)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 180)
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
             .background(Color(nsColor: .windowBackgroundColor).opacity(0.8))
 
             Divider()
 
-            // Process Table Header
-            HStack(spacing: 12) {
-                Text("應用程式 / 行程與專案上下文")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Text("類別")
-                    .frame(width: 90, alignment: .leading)
-                Text("PID")
-                    .frame(width: 55, alignment: .trailing)
-                Text("已運作時間")
-                    .frame(width: 90, alignment: .trailing)
-                Text("CPU %")
-                    .frame(width: 75, alignment: .trailing)
-                Text("記憶體佔用 (比例)")
-                    .frame(width: 135, alignment: .trailing)
-                Text("動作")
-                    .frame(width: 70, alignment: .center)
-            }
-            .font(.system(size: 11, weight: .bold))
-            .foregroundColor(.secondary)
-            .padding(.horizontal, 20)
-            .padding(.vertical, 8)
-            .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
+            GeometryReader { geometry in
+                let compactColumns = geometry.size.width < 880
 
-            Divider()
+                VStack(spacing: 0) {
+                    // Process Table Header. Compact windows retain the columns needed
+                    // for resource decisions; secondary metadata remains in row details.
+                    HStack(spacing: 12) {
+                        Text("應用程式 / 行程與專案上下文")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if !compactColumns {
+                            Text("類別")
+                                .frame(width: 90, alignment: .leading)
+                            Text("PID")
+                                .frame(width: 55, alignment: .trailing)
+                            Text("已運作時間")
+                                .frame(width: 90, alignment: .trailing)
+                        }
+                        Text("CPU %")
+                            .frame(width: 75, alignment: .trailing)
+                        Text("記憶體佔用 (比例)")
+                            .frame(width: compactColumns ? 120 : 135, alignment: .trailing)
+                        Text("動作")
+                            .frame(width: compactColumns ? 60 : 70, alignment: .center)
+                    }
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(Color(nsColor: .controlBackgroundColor).opacity(0.3))
 
-            // Process List
-            List(dashboardVM.filteredProcesses) { proc in
-                HStack(spacing: 12) {
+                    Divider()
+
+                    // Process List
+                    List(dashboardVM.filteredProcesses) { proc in
+                        HStack(spacing: 12) {
                     // App Icon & Name & Project Context
                     HStack(spacing: 10) {
                         Image(systemName: proc.category.iconName)
@@ -141,23 +179,24 @@ public struct ProcessTableView: View {
                         selectedProcessForDetails = proc
                     }
 
-                    // Category
-                    Text(proc.category.rawValue)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .frame(width: 90, alignment: .leading)
+                            if !compactColumns {
+                                // Secondary metadata is omitted only in compact mode;
+                                // clicking the row still exposes it in the detail sheet.
+                                Text(proc.category.rawValue)
+                                    .font(.system(size: 11))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 90, alignment: .leading)
 
-                    // PID
-                    Text("\(proc.pid)")
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .frame(width: 55, alignment: .trailing)
+                                Text("\(proc.pid)")
+                                    .font(.system(size: 12, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 55, alignment: .trailing)
 
-                    // Uptime
-                    Text(proc.formattedUptime)
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(.secondary)
-                        .frame(width: 90, alignment: .trailing)
+                                Text(proc.formattedUptime)
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 90, alignment: .trailing)
+                            }
 
                     // CPU %
                     Text(String(format: "%.1f%%", proc.cpuPercentage))
@@ -173,7 +212,7 @@ public struct ProcessTableView: View {
                             .font(.system(size: 10))
                             .foregroundColor(.secondary)
                     }
-                    .frame(width: 135, alignment: .trailing)
+                            .frame(width: compactColumns ? 120 : 135, alignment: .trailing)
 
                     // Actions
                     HStack(spacing: 8) {
@@ -195,12 +234,14 @@ public struct ProcessTableView: View {
                         .buttonStyle(.plain)
                         .help("降低優先權 (Renice)")
                     }
-                    .frame(width: 70, alignment: .center)
+                            .frame(width: compactColumns ? 60 : 70, alignment: .center)
+                        }
+                        .padding(.vertical, 4)
+                        .help("點擊可查看此行程的發起應用、所屬專案目錄與完整指令")
+                    }
+                    .listStyle(.plain)
                 }
-                .padding(.vertical, 4)
-                .help("點擊可查看此行程的發起應用、所屬專案目錄與完整指令")
             }
-            .listStyle(.plain)
         }
         .confirmationDialog(
             "確定要結束此行程？",
@@ -381,9 +422,9 @@ public struct ProcessTableView: View {
     private func formatMemory(_ bytes: UInt64) -> String {
         let mb = Double(bytes) / (1024 * 1024)
         if mb >= 1024 {
-            return String(format: "%.2f GB", mb / 1024)
+            return String(format: "%.2f GiB", mb / 1024)
         } else {
-            return String(format: "%.0f MB", mb)
+            return String(format: "%.0f MiB", mb)
         }
     }
 }

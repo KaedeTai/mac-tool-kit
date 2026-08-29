@@ -126,21 +126,11 @@ public struct MainWindowView: View {
 
             // MARK: - Right Detail Content
             VStack(spacing: 0) {
-                // Top Title & Quick Tab Switcher Bar
+                // Context title and global monitoring controls. Navigation lives
+                // in the sidebar, so it is intentionally not duplicated here.
                 HStack {
                     Text(dashboardVM.selectedTab.rawValue)
                         .font(.title2.bold())
-
-                    Spacer()
-
-                    // Quick Top Tabs Picker as Secondary Access
-                    Picker("", selection: $dashboardVM.selectedTab) {
-                        ForEach(DashboardTab.allCases) { tab in
-                            Text(tab.rawValue).tag(tab)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(maxWidth: 550)
 
                     Spacer()
 
