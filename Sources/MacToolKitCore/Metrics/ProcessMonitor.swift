@@ -16,6 +16,8 @@ public final class ProcessMonitor: @unchecked Sendable {
     private var cachedDockerContainers: [DockerContainerInfo] = []
     private var lastDockerSampleTime: CFAbsoluteTime = 0
     private let lock = NSLock()
+    private let dockerExecutableProvider: @Sendable () -> String?
+    private let dockerCommandRunner: @Sendable (String, [String]) -> String?
 
     private struct ProcessMetadata: Sendable {
         let friendlyName: String
@@ -32,7 +34,19 @@ public final class ProcessMonitor: @unchecked Sendable {
         let aiContext: AIContextInfo?
     }
 
-    public init() {
+    public convenience init() {
+        self.init(
+            dockerExecutableProvider: { Self.defaultDockerExecutable() },
+            dockerCommandRunner: { Self.runDocker(at: $0, arguments: $1) }
+        )
+    }
+
+    init(
+        dockerExecutableProvider: @escaping @Sendable () -> String?,
+        dockerCommandRunner: @escaping @Sendable (String, [String]) -> String?
+    ) {
+        self.dockerExecutableProvider = dockerExecutableProvider
+        self.dockerCommandRunner = dockerCommandRunner
         mach_timebase_info(&timebase)
         if timebase.denom == 0 {
             timebase.numer = 1
@@ -298,8 +312,7 @@ public final class ProcessMonitor: @unchecked Sendable {
             impact = "關閉「\(rawName)」應用程式，未儲存的檔案內容可能遺失"
         }
 
-        let aiCtx = resolveAIContext(
-            pid: pid,
+        let aiCtx = Self.resolveAIContext(
             rawName: rawName,
             args: args,
             cmdSummary: cmdSummary,
@@ -326,8 +339,7 @@ public final class ProcessMonitor: @unchecked Sendable {
         return meta
     }
 
-    private func resolveAIContext(
-        pid: pid_t,
+    static func resolveAIContext(
         rawName: String,
         args: [String],
         cmdSummary: String?,
@@ -635,18 +647,17 @@ public final class ProcessMonitor: @unchecked Sendable {
             return cachedDockerContainers
         }
 
-        let dockerBinaries = ["/usr/local/bin/docker", "/opt/homebrew/bin/docker", "/usr/bin/docker", "/Applications/Docker.app/Contents/Resources/bin/docker"]
-        guard let dockerPath = dockerBinaries.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+        guard let dockerPath = dockerExecutableProvider() else {
             return []
         }
 
-        guard let statsOutput = Self.runDocker(
-            at: dockerPath,
-            arguments: ["stats", "--no-stream", "--format", "{{json .}}"]
+        guard let statsOutput = dockerCommandRunner(
+            dockerPath,
+            ["stats", "--no-stream", "--format", "{{json .}}"]
         ) else { return [] }
-        let psOutput = Self.runDocker(
-            at: dockerPath,
-            arguments: ["ps", "--no-trunc", "--format", "{{json .}}"]
+        let psOutput = dockerCommandRunner(
+            dockerPath,
+            ["ps", "--no-trunc", "--format", "{{json .}}"]
         ) ?? ""
 
         let containers = Self.parseDockerContainers(statsOutput: statsOutput, psOutput: psOutput)
@@ -702,6 +713,16 @@ public final class ProcessMonitor: @unchecked Sendable {
 
     private static func percentageValue(_ value: String) -> Double {
         Double(value.replacingOccurrences(of: "%", with: "").trimmingCharacters(in: .whitespaces)) ?? 0
+    }
+
+    private static func defaultDockerExecutable() -> String? {
+        let binaries = [
+            "/usr/local/bin/docker",
+            "/opt/homebrew/bin/docker",
+            "/usr/bin/docker",
+            "/Applications/Docker.app/Contents/Resources/bin/docker"
+        ]
+        return binaries.first(where: { FileManager.default.fileExists(atPath: $0) })
     }
 
     private static func runDocker(at path: String, arguments: [String]) -> String? {

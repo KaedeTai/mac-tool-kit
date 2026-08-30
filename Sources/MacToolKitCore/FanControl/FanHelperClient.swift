@@ -162,11 +162,21 @@ public enum FanHelperProtocolParser {
 
 public final class FanHelperClient: Sendable {
     public static let shared = FanHelperClient()
-    private let socketPath = "/var/run/macdashboard_fanhelper.sock"
+    private let socketPath: String
+    private let trustStatusProvider: (@Sendable () -> FanHelperSocketTrust)?
 
-    private init() {}
+    init(
+        socketPath: String = "/var/run/macdashboard_fanhelper.sock",
+        trustStatusProvider: (@Sendable () -> FanHelperSocketTrust)? = nil
+    ) {
+        self.socketPath = socketPath
+        self.trustStatusProvider = trustStatusProvider
+    }
 
     public func socketTrustStatus() -> FanHelperSocketTrust {
+        if let trustStatusProvider {
+            return trustStatusProvider()
+        }
         var metadata = stat()
         guard lstat(socketPath, &metadata) == 0 else {
             return errno == ENOENT

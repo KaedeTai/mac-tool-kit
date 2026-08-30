@@ -3,12 +3,42 @@ import Foundation
 public final class PrivilegedHelperManager: Sendable {
     public static let shared = PrivilegedHelperManager()
 
-    public let helperIdentifier = "com.peterting.macdashboard.fanhelper"
-    public let helperToolPath = "/Library/PrivilegedHelperTools/com.peterting.macdashboard.fanhelper"
-    public let daemonPlistPath = "/Library/LaunchDaemons/com.peterting.macdashboard.fanhelper.plist"
-    public let socketPath = "/var/run/macdashboard_fanhelper.sock"
+    public let helperIdentifier: String
+    public let helperToolPath: String
+    public let daemonPlistPath: String
+    public let socketPath: String
 
-    private init() {}
+    private let bundledHelperLocator: (@Sendable () -> URL?)?
+    private let scriptExecutor: (@Sendable (String) -> String?)?
+    private let pingProvider: @Sendable () async -> Bool
+    private let capabilityProvider: @Sendable () async -> FanHelperCapability
+    private let sleepProvider: @Sendable (UInt64) async -> Void
+
+    init(
+        helperIdentifier: String = "com.peterting.macdashboard.fanhelper",
+        helperToolPath: String = "/Library/PrivilegedHelperTools/com.peterting.macdashboard.fanhelper",
+        daemonPlistPath: String = "/Library/LaunchDaemons/com.peterting.macdashboard.fanhelper.plist",
+        socketPath: String = "/var/run/macdashboard_fanhelper.sock",
+        bundledHelperLocator: (@Sendable () -> URL?)? = nil,
+        scriptExecutor: (@Sendable (String) -> String?)? = nil,
+        pingProvider: @escaping @Sendable () async -> Bool = { await FanHelperClient.shared.ping() },
+        capabilityProvider: @escaping @Sendable () async -> FanHelperCapability = {
+            await FanHelperClient.shared.probeCapability()
+        },
+        sleepProvider: @escaping @Sendable (UInt64) async -> Void = {
+            try? await Task.sleep(nanoseconds: $0)
+        }
+    ) {
+        self.helperIdentifier = helperIdentifier
+        self.helperToolPath = helperToolPath
+        self.daemonPlistPath = daemonPlistPath
+        self.socketPath = socketPath
+        self.bundledHelperLocator = bundledHelperLocator
+        self.scriptExecutor = scriptExecutor
+        self.pingProvider = pingProvider
+        self.capabilityProvider = capabilityProvider
+        self.sleepProvider = sleepProvider
+    }
 
     public func isInstalled() -> Bool {
         return FileManager.default.fileExists(atPath: helperToolPath) &&
@@ -16,14 +46,18 @@ public final class PrivilegedHelperManager: Sendable {
     }
 
     public func isRunning() async -> Bool {
-        return await FanHelperClient.shared.ping()
+        return await pingProvider()
     }
 
     public func capability() async -> FanHelperCapability {
-        await FanHelperClient.shared.probeCapability()
+        await capabilityProvider()
     }
 
     public func locateBundledHelper() -> URL? {
+        if let bundledHelperLocator {
+            return bundledHelperLocator()
+        }
+
         // 1. Check in Bundle.main.resourceURL
         if let resURL = Bundle.main.resourceURL {
             let helperURL = resURL.appendingPathComponent("MacDashboardFanHelper")
@@ -109,30 +143,22 @@ public final class PrivilegedHelperManager: Sendable {
         " with administrator privileges
         """
 
-        var error: NSDictionary?
-        if let appleScript = NSAppleScript(source: script) {
-            let output = appleScript.executeAndReturnError(&error)
-            if let err = error {
-                let errMsg = err[NSAppleScript.errorMessage] as? String ?? "使用者取消授權或安裝失敗"
-                return .failure(HelperError(errMsg))
-            }
-            _ = output
-
-            // Installation is successful only after measured fan readback is
-            // available. A ping alone merely proves that the daemon launched.
-            var lastCapability: FanHelperCapability = .unreachable
-            for _ in 0..<15 {
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                lastCapability = await capability()
-                if lastCapability.hasVerifiedFanReadback {
-                    return .success(())
-                }
-            }
-
-            return .failure(HelperError("助手已安裝，但未通過硬體讀回驗證（\(lastCapability.localizedDescription)）；未宣告啟用成功。"))
-        } else {
-            return .failure(HelperError("無法建立 AppleScript 執行環境"))
+        if let errorMessage = executeAdministratorScript(script) {
+            return .failure(HelperError(errorMessage))
         }
+
+        // Installation is successful only after measured fan readback is
+        // available. A ping alone merely proves that the daemon launched.
+        var lastCapability: FanHelperCapability = .unreachable
+        for _ in 0..<15 {
+            await sleepProvider(200_000_000)
+            lastCapability = await capability()
+            if lastCapability.hasVerifiedFanReadback {
+                return .success(())
+            }
+        }
+
+        return .failure(HelperError("助手已安裝，但未通過硬體讀回驗證（\(lastCapability.localizedDescription)）；未宣告啟用成功。"))
     }
 
     public func uninstallHelper() async -> Result<Void, HelperError> {
@@ -143,17 +169,24 @@ public final class PrivilegedHelperManager: Sendable {
         " with administrator privileges
         """
 
-        var error: NSDictionary?
-        if let appleScript = NSAppleScript(source: script) {
-            let output = appleScript.executeAndReturnError(&error)
-            if let err = error {
-                let errMsg = err[NSAppleScript.errorMessage] as? String ?? "解除安裝失敗"
-                return .failure(HelperError(errMsg))
-            }
-            _ = output
-            return .success(())
-        } else {
-            return .failure(HelperError("無法建立 AppleScript 執行環境"))
+        if let errorMessage = executeAdministratorScript(script) {
+            return .failure(HelperError(errorMessage))
         }
+        return .success(())
+    }
+
+    private func executeAdministratorScript(_ script: String) -> String? {
+        if let scriptExecutor {
+            return scriptExecutor(script)
+        }
+
+        guard let appleScript = NSAppleScript(source: script) else {
+            return "無法建立 AppleScript 執行環境"
+        }
+
+        var error: NSDictionary?
+        _ = appleScript.executeAndReturnError(&error)
+        guard let error else { return nil }
+        return error[NSAppleScript.errorMessage] as? String ?? "使用者取消授權或執行失敗"
     }
 }

@@ -4,26 +4,26 @@
   "project": "mac-tool-kit",
   "mode": "local-only",
   "source_of_truth": "repo-json",
-  "updated_at": "2026-08-29T22:17:00+08:00",
+  "updated_at": "2026-08-30T12:22:00+08:00",
   "acceptance_policy": {
     "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
     "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
     "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
   },
   "summary": {
-    "overall_status": "release-live-verification-policy-blocked",
-    "verdict": "github-release-live-coverage-blocked",
+    "overall_status": "coverage-gate-passed-working-tree-unreleased",
+    "verdict": "working-tree-tests-verified-release-artifacts-unchanged",
     "prd_items": 5,
     "verified": 0,
     "partial": 5,
     "planned": 0,
-    "blocked": 1,
+    "blocked": 0,
     "not_covered": 0,
     "test_cases": 17,
-    "automated_passed": 14,
-    "automated_failed": 1,
+    "automated_passed": 15,
+    "automated_failed": 0,
     "manual_not_covered": 2,
-    "coverage_lines_percent": 71.04
+    "coverage_lines_percent": 95.61
   },
   "prd_items": [
     {
@@ -31,7 +31,7 @@
       "title": "Dashboard data truth audit",
       "status": "partial",
       "priority": "P0",
-      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. Release status remains blocked only by coverage and unexecuted destructive-action paths.",
+      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. The current working tree now passes the repository coverage gate; destructive-action paths remain deliberately manual and the published v1.3.0 artifacts are unchanged.",
       "source_refs": [
         "Sources/MacToolKitCore",
         "Sources/MacDashboardApp",
@@ -44,7 +44,7 @@
         "Unavailable measurements never masquerade as facts: analytical grids omit empty fields, while safety-critical controls expose an explicit reason and fail closed.",
         "All eight tabs pass automated and manual checks."
       ],
-      "test_case_counts": { "total": 10, "passed": 9, "failed": 1, "not_covered": 0 },
+      "test_case_counts": { "total": 10, "passed": 10, "failed": 0, "not_covered": 0 },
       "test_cases": [
         {
           "id": "TC-OVERVIEW-001",
@@ -152,16 +152,16 @@
         },
         {
           "id": "TC-TEST-SUITE-001",
-          "status": "partial",
+          "status": "verified",
           "use_cases": ["Run package regression suite"],
           "types": ["unit", "integration"],
           "role": "Developer",
           "fixture": "Current main working tree",
           "steps": ["Run swift test --enable-code-coverage"],
           "expected": "All tests pass and core logic coverage exceeds 95 percent.",
-          "automated_status": "failed",
+          "automated_status": "passed",
           "manual_status": "not_required",
-          "evidence": ["71 coverage-enabled tests passed with 0 failures at 22:09.", "Combined source line coverage is 71.04 percent (4,704 / 6,622 lines), below the 95 percent release target.", "Permanent AI history strips raw turn descriptions before every atomic write; a regression test proves this for current scans.", "Dedicated regressions prove that History starts collapsed, branches page in bounded 40-row batches, collapsed main sessions hide child paging controls, a selected Recent child reveals only its exact project/parent branch, permanent History has no timer refresh, disk-cache purge is not offered as RAM remediation, project-only processes cannot mark older-than-24-hour sessions Idle, thermal point counts do not collapse into summary-card counts, and disabling API estimates hides them from the selected-session evidence panel."]
+          "evidence": ["104 coverage-enabled tests passed with 0 failures at 12:21 on 2026-08-30.", "Combined source line coverage is 95.61 percent (6,363 / 6,655 lines), above the repository 95 percent target.", "New behavior-focused coverage exercises provider parsers and pricing, active/recent/history aggregation, parent-child tree behavior, runtime reconciliation, storage scanning and cleanup boundaries, hardware presentation, fan socket protocol, privileged-helper outcomes, lag severity, Docker command isolation, AI process attribution, and live read-only metric sampling.", "Permanent AI history strips raw turn descriptions before every atomic write; a regression test proves this for current scans."]
         },
         {
           "id": "TC-VISUAL-001",
@@ -180,11 +180,11 @@
       "tasks": [
         { "id": "TASK-AUDIT-001", "title": "Trace all displayed values to source", "status": "done" },
         { "id": "TASK-AUDIT-002", "title": "Implement corrections", "status": "done" },
-        { "id": "TASK-RELEASE-130", "title": "Publish v1.3.0 with current Retina screenshots, README and evidence-based release notes", "status": "done" }
+        { "id": "TASK-RELEASE-130", "title": "Publish v1.3.0 with current Retina screenshots, README and evidence-based release notes", "status": "done" },
+        { "id": "TASK-COVERAGE-095", "title": "Raise combined source line coverage above 95 percent with behavior-focused tests", "status": "done" }
       ],
       "gaps": [
-        "Process termination and manual fan writes were not executed against unrelated live workloads.",
-        "Combined source line coverage is 71.04 percent, below the repository 95 percent release target."
+        "Process termination and manual fan writes were not executed against unrelated live workloads."
       ]
     },
     {
@@ -361,7 +361,7 @@
       "title": "MacDashboard v1.3.0 public release",
       "status": "partial",
       "priority": "P0",
-      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. All three public assets were downloaded again and verified; repository coverage remains below policy.",
+      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. The current uncommitted working tree passes the 95 percent coverage policy, but the already-published v1.3.0 tag and artifacts have not been rebuilt from these coverage changes.",
       "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots", "https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0"],
       "acceptance_criteria": [
         "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
@@ -405,7 +405,7 @@
         { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "done" }
       ],
       "gaps": [
-        "Combined source line coverage is 71.04 percent, below the repository 95 percent release target.",
+        "The current working tree reaches 95.61 percent line coverage, but these test and testability changes are not part of the published v1.3.0 tag or artifacts.",
         "The release artifacts are ad-hoc signed and not Apple-notarized."
       ]
     }

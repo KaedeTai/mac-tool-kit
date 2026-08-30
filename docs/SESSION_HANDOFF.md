@@ -1,10 +1,14 @@
-# Session Handoff — MacDashboard v1.3.0 release
+# Session Handoff — MacDashboard coverage gate
 
-Updated: 2026-08-29 22:17 Asia/Taipei
+Updated: 2026-08-30 12:22 Asia/Taipei
 
 ## Current state
 
 - GitHub Release [`v1.3.0`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0) is public, non-draft and non-prerelease. Tag `v1.3.0` resolves to source commit `4778d2fe097fc5a1cc502a3476c303a9909ceef0`.
+- The current working tree has raised combined source line coverage from 71.04% to 95.61% with behavior-focused tests. These local changes are not yet committed, tagged, or rebuilt into the published v1.3.0 artifacts.
+- Coverage now exercises AI value models and pricing, provider parsers, summary/history/runtime/tree behavior, storage boundaries, live read-only metrics, hardware presentation, lag diagnosis, the fan socket protocol, and privileged-helper success/failure outcomes.
+- `FanHelperClient` and `PrivilegedHelperManager` gained internal dependency-injection seams so socket and administrator-script behavior can be tested without changing the public shared-client defaults or performing privileged writes.
+- The unreachable Lag severity branch was removed after tests covered every reachable score/cause combination; the user-visible severe verdict remains covered by combined critical signals.
 - `VERSION`, the app bundle, DMG, ZIP, tag and Release Note are aligned at `1.3.0`.
 - README has been rewritten around explicit data provenance and now embeds all eight current Dashboard tabs.
 - The eight public screenshots under `assets/screenshots/` are direct 1440 × 1050 PNG captures. Every file was opened at original detail and inspected for clipping, overlap and readability.
@@ -15,8 +19,9 @@ Updated: 2026-08-29 22:17 Asia/Taipei
 
 ## Verification
 
-- `swift test --enable-code-coverage`: 71 tests, 0 failures.
-- Combined source line coverage: 71.04% (4,704 / 6,622 lines), below the repository 95% target.
+- `swift test --enable-code-coverage`: 104 tests, 0 failures.
+- Combined source line coverage: 95.61% (6,363 / 6,655 lines), above the repository 95% target.
+- Coverage command: `xcrun llvm-cov report .build/arm64-apple-macosx/debug/mac-tool-kitPackageTests.xctest/Contents/MacOS/mac-tool-kitPackageTests -instr-profile=.build/arm64-apple-macosx/debug/codecov/default.profdata -ignore-filename-regex='Tests/|\.build/'`.
 - `INSTALL=1 ./scripts/build_app.sh`: release build succeeded and installed `/Applications/MacDashboard.app`.
 - Installed app version: `1.3.0`; strict deep code-sign verification passed.
 - DMG mounted read-only; embedded app version was `1.3.0` and strict code-sign verification passed.
@@ -34,6 +39,8 @@ Updated: 2026-08-29 22:17 Asia/Taipei
 - Version source: `VERSION`
 - App and archive packaging: `scripts/build_app.sh`, `scripts/package_dmg.sh`
 - AI estimate display policy: `Sources/MacToolKitCore/AIAnalytics/AISessionTreePresentation.swift`
+- Coverage expansion: `Tests/MacToolKitCoreTests/CoverageExpansionTests.swift`, `ParserAndStorageCoverageTests.swift`, `FanClientCoverageTests.swift`, `PrivilegedHelperManagerCoverageTests.swift`
+- Testability seams: `Sources/MacToolKitCore/FanControl/FanHelperClient.swift`, `PrivilegedHelperManager.swift`
 - AI tree and evidence panel: `Sources/MacDashboardApp/Views/AIAnalyticsView.swift`
 - Estimate visibility regression: `Tests/MacToolKitCoreTests/TrustworthyDashboardTests.swift`
 - Release artifacts: `dist/MacDashboard-v1.3.0-macOS.dmg`, `dist/MacDashboard-v1.3.0-macOS.zip`, `dist/SHA256SUMS.txt`
@@ -41,14 +48,15 @@ Updated: 2026-08-29 22:17 Asia/Taipei
 
 ## Follow-up priorities
 
-1. Raise combined source coverage from 71.04% to the repository's 95% policy before changing the overall verdict to safe.
+1. Review and commit the current coverage/testability changes before cutting a future release; do not imply that v1.3.0 contains them.
 2. Add an automated screenshot/layout baseline for all eight tabs.
 3. If fully automated installation is required, sign with a Developer ID certificate and notarize the DMG/ZIP workflow.
 4. Keep destructive acceptance isolated: use a user-approved disposable cache fixture, never unrelated live data or Docker volumes.
 
 ## Risks and deliberate gaps
 
-- Coverage is 71.04%, below the 95% repository release policy; the final verdict must remain `unverified` even if the GitHub release is live.
+- Coverage is 95.61%; future source growth still needs accompanying tests so CI does not regress below 95%.
+- The coverage result applies to the current working tree, not the published v1.3.0 commit or downloadable artifacts.
 - The app is ad-hoc signed and not Apple-notarized.
 - No real user-file deletion, unrelated process termination, Docker volume deletion, or manual fan write was executed for release evidence.
 - Automated pixel-diff regression is not configured; all eight final screenshots were manually inspected.

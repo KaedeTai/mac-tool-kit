@@ -218,9 +218,6 @@ public final class LagDetective: Sendable {
         } else if finalScore >= 65 {
             severity = .minor
             summary = "規則偵測到輕度資源負載；是否造成體感卡頓仍需對照發生時間。"
-        } else if finalScore >= 40 {
-            severity = .moderate
-            summary = "系統出現中度資源吃緊或溫度升高，建議查看上方分析原因並清理高佔用程式。"
         } else {
             severity = .severe
             summary = "規則偵測到多個高風險資源訊號；請先核對原因與行程身分，再決定是否執行修復。"

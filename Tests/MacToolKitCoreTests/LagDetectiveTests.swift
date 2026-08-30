@@ -150,4 +150,71 @@ final class LagDetectiveTests: XCTestCase {
         XCTAssertTrue(report.causes.isEmpty)
         XCTAssertTrue(report.suggestedActions.isEmpty)
     }
+
+    func testModerateCPUAndDiskPressureProducesMinorDiagnosis() {
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 70),
+            memory: MemoryUsageSnapshot(usedPercentage: 82, pressureState: .warning),
+            processes: [],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot(
+                readBytesPerSec: 200 * 1024 * 1024,
+                writeBytesPerSec: 200 * 1024 * 1024
+            )
+        )
+
+        XCTAssertEqual(report.healthScore, 70)
+        XCTAssertEqual(report.severity, .minor)
+        XCTAssertEqual(Set(report.causes.map(\.category)), Set(["CPU 負載", "記憶體偏高", "磁碟密集 I/O"]))
+    }
+
+    func testAIProcessAttributionUsesMeasuredContext() {
+        let process = ProcessItem(
+            pid: 9010,
+            name: "AI worker",
+            projectName: "mac-tool-kit",
+            triggerAppName: "Codex",
+            uptimeSeconds: 65,
+            cpuPercentage: 75,
+            memoryBytes: 3 * 1024 * 1024 * 1024,
+            aiContext: AIContextInfo(
+                toolName: "Codex",
+                modelName: "gpt-5.6-sol",
+                sessionId: "session-abcdef",
+                taskSummary: "coverage"
+            )
+        )
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 80),
+            memory: MemoryUsageSnapshot(usedPercentage: 85, pressureState: .warning),
+            processes: [process],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .nominal),
+            diskIO: DiskIOSnapshot()
+        )
+
+        XCTAssertTrue(report.causes.contains { $0.category == "AI 運算尖峰" && $0.title.contains("gpt-5.6-sol") })
+        XCTAssertEqual(report.suggestedActions.filter { $0.pid == process.pid }.count, 2)
+        XCTAssertFalse(report.suggestedActions.contains { $0.typeId == "kill_mem_hog" })
+    }
+
+    func testCombinedCriticalSignalsClampScoreAndProduceSevereDiagnosis() {
+        let report = LagDetective().diagnose(
+            cpu: CPUUsageSnapshot(totalUsage: 99),
+            memory: MemoryUsageSnapshot(
+                usedPercentage: 99,
+                swapUsedBytes: 8 * 1024 * 1024 * 1024,
+                pressureState: .critical
+            ),
+            processes: [],
+            batteryThermal: BatteryThermalSnapshot(thermalState: .critical),
+            diskIO: DiskIOSnapshot(
+                readBytesPerSec: 500 * 1024 * 1024,
+                writeBytesPerSec: 100 * 1024 * 1024
+            )
+        )
+
+        XCTAssertEqual(report.healthScore, 0)
+        XCTAssertEqual(report.severity, .severe)
+        XCTAssertTrue(report.summary.contains("高風險"))
+    }
 }
