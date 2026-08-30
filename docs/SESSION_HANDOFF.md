@@ -1,12 +1,12 @@
-# Session Handoff — MacDashboard v1.3.1 release candidate
+# Session Handoff — MacDashboard v1.3.1 public release
 
-Updated: 2026-08-30 23:25 Asia/Taipei
+Updated: 2026-08-30 23:30 Asia/Taipei
 
 ## Current state
 
 - `VERSION`, the installed app, DMG, ZIP and Release Note are aligned at `1.3.1`.
-- The release candidate includes the latest origin/main behavior-focused coverage and testability changes.
-- GitHub tag, Release publication and unauthenticated public-download verification are still pending.
+- GitHub Release [`v1.3.1`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.1) is public, non-draft and non-prerelease.
+- Tag `v1.3.1` resolves to release-source commit `2314663f63159d2fc422368157842dd90a9f480b`, which includes the latest behavior-focused coverage and testability changes.
 - Coverage exercises AI value models and pricing, provider parsers, summary/history/runtime/tree behavior, storage boundaries, live read-only metrics, hardware presentation, lag diagnosis, the fan socket protocol and privileged-helper outcomes.
 - The visible UI is unchanged from v1.3.0, so the eight existing direct 1440 × 1050 PNG screenshots remain the applicable visual evidence.
 
@@ -22,6 +22,9 @@ Updated: 2026-08-30 23:25 Asia/Taipei
 - DMG SHA-256: `9b9b47321ff422d8a1c0cff347a2f926df7a471bed732dcf8388a0b2c6473b78`.
 - ZIP SHA-256: `6a5099890cb730b6366616e0aacfcd287a92d9e1a553dca2c59f900fae187dc0`.
 - README screenshot dimensions: eight of eight are 1440 × 1050 PNG.
+- GitHub reports DMG, ZIP and `SHA256SUMS.txt` as uploaded assets; the release page returns HTTP 200.
+- All three assets were downloaded again from public URLs. The public checksum manifest passed for both packages; the public DMG and ZIP reported version `1.3.1` and passed strict deep code-sign verification.
+- No GitHub Actions workflows are configured for this repository, so `gh run list --branch main` returned no runs; local Tier 3 evidence is the build/test gate.
 
 ## Source map
 
@@ -34,12 +37,16 @@ Updated: 2026-08-30 23:25 Asia/Taipei
 - Release artifacts: `dist/MacDashboard-v1.3.1-macOS.dmg`, `dist/MacDashboard-v1.3.1-macOS.zip`, `dist/SHA256SUMS.txt`
 - Acceptance state: `prd-tracker.json`, `docs/PRD_TRACKER.md`, `docs/design-site/index.html`
 
-## Remaining release steps
+## Rollout ledger
 
-1. Commit and push the v1.3.1 release source.
-2. Create and push tag `v1.3.1` at the exact release-source commit.
-3. Publish the GitHub Release with DMG, ZIP and `SHA256SUMS.txt`.
-4. Download all three public attachments again, compare checksums and re-open the published packages.
+- Source: release-source commit and tag verified at `2314663f63159d2fc422368157842dd90a9f480b`.
+- CI/build: GitHub Actions not configured; fresh local tests, coverage, release build and signing passed.
+- Candidate: local DMG/ZIP mount or extraction, version, signature and checksums passed.
+- Cutover: GitHub Release is public, non-draft and non-prerelease with three uploaded assets.
+- Public route: release page HTTP 200; public DMG/ZIP/checksum downloads passed.
+- Changed behavior: coverage and testability paths passed 104 native tests; no UI source changed.
+- Data/runtime: no schema migration or persistent-data cutover in this patch.
+- Monitoring: terminal `LIVE`; GitHub asset states are `uploaded` and public re-download verification passed.
 
 ## Risks and deliberate gaps
 

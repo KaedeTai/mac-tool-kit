@@ -4,15 +4,15 @@
   "project": "mac-tool-kit",
   "mode": "local-only",
   "source_of_truth": "repo-json",
-  "updated_at": "2026-08-30T23:25:00+08:00",
+  "updated_at": "2026-08-30T23:30:00+08:00",
   "acceptance_policy": {
     "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
     "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
     "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
   },
   "summary": {
-    "overall_status": "v1.3.1-release-candidate-verified-publication-pending",
-    "verdict": "local-v1.3.1-artifacts-verified-github-release-pending",
+    "overall_status": "v1.3.1-public-release-verified",
+    "verdict": "v1.3.1-public-assets-verified-manual-gaps-disclosed",
     "prd_items": 5,
     "verified": 0,
     "partial": 5,
@@ -361,8 +361,8 @@
       "title": "MacDashboard v1.3.1 verified patch release",
       "status": "partial",
       "priority": "P0",
-      "summary": "The v1.3.1 release candidate contains the latest origin/main coverage and testability changes. Its versioned DMG, ZIP and checksum manifest pass local mount/extraction, bundle-version and strict signature checks; GitHub publication and public-download verification are still pending.",
-      "source_refs": ["README.md", "docs/releases/v1.3.1.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots"],
+      "summary": "GitHub Release v1.3.1 is public and contains the latest coverage and testability changes from release-source commit 2314663f63159d2fc422368157842dd90a9f480b. Its DMG, ZIP and checksum manifest were downloaded again from public URLs; both packages match the published SHA-256 values, report bundle version 1.3.1 and pass strict signature verification.",
+      "source_refs": ["README.md", "docs/releases/v1.3.1.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots", "https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.1"],
       "acceptance_criteria": [
         "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
         "The app bundle, DMG, ZIP, tag and release notes use version 1.3.1.",
@@ -396,16 +396,15 @@
           "expected": "Both archives contain a version 1.3.1 app that passes strict signature verification and matches published checksums.",
           "automated_status": "passed",
           "manual_status": "passed",
-          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.1 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.1.md.", "GitHub publication and public-download verification are pending."]
+          "evidence": ["Local DMG mounted read-only and ZIP extracted successfully.", "Both local embedded apps reported CFBundleShortVersionString 1.3.1 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.1.md.", "GitHub reports v1.3.1 as a public non-draft, non-prerelease release with three uploaded assets.", "All three assets were downloaded again from public URLs without gh asset retrieval; the downloaded DMG and ZIP passed the published SHA-256 manifest, reported version 1.3.1 and passed strict code-sign verification.", "Tag v1.3.1 and the release source resolve to 2314663f63159d2fc422368157842dd90a9f480b."]
         }
       ],
       "tasks": [
         { "id": "TASK-RELEASE-README", "title": "Replace stale README claims and add all current screenshots", "status": "done" },
         { "id": "TASK-RELEASE-PACKAGE", "title": "Build and verify versioned DMG, ZIP and checksums", "status": "done" },
-        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.1", "status": "doing" }
+        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.1", "status": "done" }
       ],
       "gaps": [
-        "The v1.3.1 GitHub release and unauthenticated public downloads have not yet been created and revalidated.",
         "The release artifacts are ad-hoc signed and not Apple-notarized."
       ]
     }
