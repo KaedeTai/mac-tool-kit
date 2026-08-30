@@ -21,7 +21,7 @@
 ## 本輪基準
 
 - 2026-08-29 已完成八個 tab 的 truth-safety 與最小視窗實作：資料來源分類、Active／Idle／Inactive、Recent 24h／永久 History、父子 Session、64-bit 網路、具名 IOHID 感測器、風扇讀回、行程秘密遮蔽、磁碟組成與分級清理。
-- `swift test --enable-code-coverage`：104 tests passed、0 failures；整體 line coverage 95.61%（6,363 / 6,655 lines），已通過 repo 的 95% gate。
+- `swift test --enable-code-coverage`：104 tests passed、0 failures；整體 line coverage 95.63%（6,364 / 6,655 lines），已通過 repo 的 95% gate。
 - 永久 AI history 寫入前會強制移除 raw turn 描述；此規則有獨立失敗／通過回歸測試。
 - AI 介面只顯示「API 等價估算（非帳單）」；「實際扣款」已從 UI 拔除。估算預設顯示、帶 2026-08-28 官方費率版本，並按模型分桶計算 input／output／cache read／cache write。缺精確模型或 cache-write TTL 時不套 fallback。
 - Release App 已更新至 `/Applications/MacDashboard.app`。八個 tab 都已逐頁擷取為 1440 × 1050 PNG 並以原始像素讀取；最終公開 AI 截圖只保留目前 mac-tool-kit 的真實 Active Codex session，關閉估算後清單與詳情均不再顯示估算。總覽的 Docker 狀態已改由 `docker ps` 合併，Lag 與 RAM 不再承諾固定釋放量。
@@ -35,4 +35,4 @@
 - 「選擇並釋放空間」預設不勾任何項目，只允許固定白名單的可重建快取、日誌與垃圾桶；每項顯示路徑、影響和後果，並有第二次永久清除確認。真實使用者檔案未執行刪除；刪除與重新量測以 temporary fixture 驗證。Docker Images／Containers／Volumes／Build Cache 由 `docker system df` 分開回報；Dashboard 不提供可能刪資料庫的 volume prune。
 - 行程管理員在 1000-point 最小寬度改為 compact columns：保留名稱／來源、CPU、RAM 與動作，類別、PID、已運作時間改到列明細。八個 tab 的最小視窗截圖已逐頁讀取，未再看到垂直文字、控制列重疊或主要操作被截斷。
 - 風扇寫入與結束行程不為了測試而執行，維持 manual not-covered；purge 不再列為可驗證的 RAM 動作。
-- GitHub Release [`v1.3.0`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0) 已公開且不是 draft／prerelease。DMG、ZIP 與 SHA256SUMS 共三個附件都已從公開網址重新下載；兩個發行包通過公布的 SHA-256。來源 tag 指向 `4778d2fe097fc5a1cc502a3476c303a9909ceef0`。
+- v1.3.1 release candidate 已在本機完成 DMG／ZIP mount 或 extract、bundle version 1.3.1、strict code-sign 與 SHA-256 驗證；GitHub tag、Release 與公開下載回驗仍在進行中。

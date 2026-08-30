@@ -205,13 +205,13 @@
       <a href="#phases">實作階段</a>
       <a href="#decisions">已接受決策</a>
     </nav>
-    <div class="sidebar-note">Snapshot<br>2026-08-30 12:27<br><span class="good">origin/main · 104 tests passed · coverage gate passed</span></div>
+    <div class="sidebar-note">Snapshot<br>2026-08-30 23:25<br><span class="good">v1.3.1 candidate · 104 tests passed · coverage gate passed</span></div>
   </aside>
 
   <main>
     <section id="verdict" class="hero">
       <div class="eyebrow">Truth-safety implementation · Verification status</div>
-      <h1>origin/main 已通過 95% coverage gate；v1.3.0 公開附件維持不變。</h1>
+      <h1>v1.3.1 release candidate 已通過測試、coverage、封裝與簽章 gate。</h1>
       <p class="lede">AI session、token／API 等價美元、Docker 狀態、核心類型、元件溫度、風扇轉速、網路計數、Lag 結論與磁碟容量都採來源導向。永久 History 採分層收合、40 筆分批載入與手動同步；RAM 頁已移除無法清 inactive pages 的 purge 假動作。磁碟組成只呈現成功讀取部分的下限，清理採白名單、影響分級與二次確認；未掃描空間不猜內容。</p>
       <div class="legend" aria-label="證據標籤">
         <span class="chip good"><span class="dot"></span>Measured 實測</span>
@@ -222,10 +222,10 @@
         <span class="chip"><span class="dot"></span>Unavailable 無資料</span>
       </div>
       <div class="verdict-line">
-        <div><span>Current verdict</span><strong class="good">origin/main · coverage verified</strong></div>
+        <div><span>Current verdict</span><strong class="good">v1.3.1 candidate verified</strong></div>
         <div><span>Truth fixes</span><strong class="good">8 / 8</strong></div>
-        <div><span>Swift tests</span><strong class="good">71 / 71</strong></div>
-        <div><span>Combined coverage</span><strong class="good">95.61%</strong></div>
+        <div><span>Swift tests</span><strong class="good">104 / 104</strong></div>
+        <div><span>Combined coverage</span><strong class="good">95.63%</strong></div>
       </div>
     </section>
 
@@ -346,7 +346,7 @@
       <div class="phase reveal"><strong>Phase 2</strong><p><b>AI data model：</b>Codex exact cwd/token/runtime state、Claude nested subagent/process matching、explicit parentSessionId、Active／Idle／Inactive 與 Unlinked queue。</p><span class="status pass">IMPLEMENTED</span></div>
       <div class="phase reveal"><strong>Phase 3</strong><p><b>History UX：</b>atomic local history index、Recent 24h、逐層收合、40 筆分批呈現、indexed child lookup、History manual refresh。</p><span class="status pass">IMPLEMENTED</span></div>
       <div class="phase reveal"><strong>Phase 4</strong><p><b>Storage &amp; responsive UX：</b>bounded lower-bound composition、cleanup allow-list、impact selection、Docker separation，以及八個 tab 的 1000-point 最小視窗人工驗收。</p><span class="status pass">IMPLEMENTED</span></div>
-      <div class="phase reveal"><strong>Release gate</strong><p>v1.3.0 GitHub Release 已公開且不是 draft／prerelease；DMG、ZIP 與 SHA256SUMS 三個附件已從公開網址重新下載，兩個發行包通過公布的 SHA-256。八個 tab 已重拍為 1440 × 1050 PNG 並以原始像素讀取。origin/main 的 commit 49474cf 已有 104 tests 全過，整體 line coverage 為 95.61%（6,363 / 6,655），已通過 repo 95% gate；這些 coverage 變更尚未重建進 v1.3.0，真實檔案清理、終止行程與風扇寫入仍維持獨立 manual not-covered。</p><span class="status verified">ORIGIN MAIN · COVERAGE PASSED</span></div>
+      <div class="phase reveal"><strong>Release gate</strong><p>v1.3.1 release candidate 已包含 origin/main 的 coverage 與 testability 變更：104 tests 全過，整體 line coverage 為 95.63%（6,364 / 6,655）；DMG 與 ZIP 內的 app 都回讀為 1.3.1 並通過 strict code-sign。八張 1440 × 1050 截圖可沿用，因本 patch 沒有 UI source 變更。GitHub tag、Release 與公開附件回驗仍在進行；真實檔案清理、終止行程與風扇寫入維持獨立 manual not-covered。</p><span class="status verified">V1.3.1 CANDIDATE · VERIFIED</span></div>
     </section>
 
     <section id="decisions">

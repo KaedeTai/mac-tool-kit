@@ -12,7 +12,7 @@
 Built natively with SwiftUI. Values that cannot be verified are omitted or labelled with their evidence boundary instead of being invented.
 
 [Download DMG / ZIP](https://github.com/PeterTing/mac-tool-kit/releases/latest) ·
-[Release notes](docs/releases/v1.3.0.md) ·
+[Release notes](docs/releases/v1.3.1.md) ·
 [Build from source](#build-from-source) ·
 [Report an issue](https://github.com/PeterTing/mac-tool-kit/issues)
 
@@ -28,7 +28,7 @@ MacDashboard is designed as an inspectable dashboard, not a collection of plausi
 - AI costs are optional **API-equivalent estimates** from provider-reported model and token fields. They are not subscription spend, credits, or billing statements.
 - Destructive actions require an explicit selection and confirmation. Docker volumes are never included in one-click cleanup.
 
-Screenshots below are direct 1440 × 1050 PNG captures from MacDashboard v1.3.0. The numbers are live samples from one Mac and will vary by machine and workload.
+Screenshots below are direct 1440 × 1050 PNG captures from MacDashboard v1.3.0. MacDashboard v1.3.1 changes test coverage and internal testability only, so the visible interface is unchanged. The numbers are live samples from one Mac and will vary by machine and workload.
 
 ## Dashboard tour
 
@@ -117,7 +117,7 @@ PID, CPU, RAM, and start time come from macOS process data. Friendly names, owni
 
 ## Installation
 
-1. Download `MacDashboard-v1.3.0-macOS.dmg` or the ZIP from the [latest release](https://github.com/PeterTing/mac-tool-kit/releases/latest).
+1. Download `MacDashboard-v1.3.1-macOS.dmg` or the ZIP from the [latest release](https://github.com/PeterTing/mac-tool-kit/releases/latest).
 2. Drag `MacDashboard.app` to Applications.
 3. The downloadable app is ad-hoc signed and is not Apple-notarized. On first launch, macOS may require **System Settings → Privacy & Security → Open Anyway**.
 4. Fan readback works without enabling manual mode. Install the privileged fan helper only if you want to change RPM; it can be removed from the Thermal & Fan page.
@@ -144,7 +144,7 @@ The release version is read from [`VERSION`](VERSION) by both packaging scripts 
 
 ## Release notes
 
-See [MacDashboard v1.3.0 release notes](docs/releases/v1.3.0.md) for the verified changes, artifact checksums, known limits, and rollback instructions. Older releases remain available on the [GitHub Releases page](https://github.com/PeterTing/mac-tool-kit/releases).
+See [MacDashboard v1.3.1 release notes](docs/releases/v1.3.1.md) for the verified changes, artifact checksums, known limits, and rollback instructions. Older releases remain available on the [GitHub Releases page](https://github.com/PeterTing/mac-tool-kit/releases).
 
 ## Contributing
 

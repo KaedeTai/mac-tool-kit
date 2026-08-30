@@ -4,15 +4,15 @@
   "project": "mac-tool-kit",
   "mode": "local-only",
   "source_of_truth": "repo-json",
-  "updated_at": "2026-08-30T12:27:00+08:00",
+  "updated_at": "2026-08-30T23:25:00+08:00",
   "acceptance_policy": {
     "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
     "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
     "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
   },
   "summary": {
-    "overall_status": "main-coverage-gate-passed-release-artifacts-unchanged",
-    "verdict": "origin-main-coverage-verified-v1.3.0-artifacts-unchanged",
+    "overall_status": "v1.3.1-release-candidate-verified-publication-pending",
+    "verdict": "local-v1.3.1-artifacts-verified-github-release-pending",
     "prd_items": 5,
     "verified": 0,
     "partial": 5,
@@ -23,7 +23,7 @@
     "automated_passed": 15,
     "automated_failed": 0,
     "manual_not_covered": 2,
-    "coverage_lines_percent": 95.61
+    "coverage_lines_percent": 95.63
   },
   "prd_items": [
     {
@@ -31,7 +31,7 @@
       "title": "Dashboard data truth audit",
       "status": "partial",
       "priority": "P0",
-      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. Commit 49474cf9f307c36040c1fb24e4caca0aeffb767d is now on origin/main and passes the repository coverage gate; destructive-action paths remain deliberately manual and the published v1.3.0 artifacts are unchanged.",
+      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. The v1.3.1 release candidate packages the origin/main coverage changes and passes the repository coverage gate; destructive-action paths remain deliberately manual.",
       "source_refs": [
         "Sources/MacToolKitCore",
         "Sources/MacDashboardApp",
@@ -357,17 +357,17 @@
       ]
     },
     {
-      "id": "PRD-RELEASE-130",
-      "title": "MacDashboard v1.3.0 public release",
+      "id": "PRD-RELEASE-131",
+      "title": "MacDashboard v1.3.1 verified patch release",
       "status": "partial",
       "priority": "P0",
-      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. Commit 49474cf9f307c36040c1fb24e4caca0aeffb767d on origin/main passes the 95 percent coverage policy, but the already-published v1.3.0 tag and artifacts have not been rebuilt from these coverage changes.",
-      "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots", "https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0"],
+      "summary": "The v1.3.1 release candidate contains the latest origin/main coverage and testability changes. Its versioned DMG, ZIP and checksum manifest pass local mount/extraction, bundle-version and strict signature checks; GitHub publication and public-download verification are still pending.",
+      "source_refs": ["README.md", "docs/releases/v1.3.1.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots"],
       "acceptance_criteria": [
         "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
-        "The app bundle, DMG, ZIP, tag and release notes use version 1.3.0.",
+        "The app bundle, DMG, ZIP, tag and release notes use version 1.3.1.",
         "Release artifacts mount or extract successfully, contain a strictly verifiable signed app, and publish SHA-256 checksums.",
-        "GitHub main, tag v1.3.0, release page and all downloadable assets are publicly reachable.",
+        "GitHub main, tag v1.3.1, release page and all downloadable assets are publicly reachable.",
         "Any unmet release policy or live destructive-action gap remains explicit in the release note and final verdict."
       ],
       "test_case_counts": { "total": 2, "passed": 2, "failed": 0, "not_covered": 0 },
@@ -378,7 +378,7 @@
           "use_cases": ["Review all Dashboard capabilities before download"],
           "types": ["documentation", "visual"],
           "role": "GitHub visitor",
-          "fixture": "Installed MacDashboard v1.3.0 on the current Mac",
+          "fixture": "Installed MacDashboard v1.3.1 on the current Mac; UI screenshots retained from v1.3.0 because this patch changes no UI source",
           "steps": ["Capture each tab as PNG", "Open every image at original detail", "Validate each README image target"],
           "expected": "Eight sharp, current and source-aware screenshots render without broken paths or stale feature claims.",
           "automated_status": "passed",
@@ -388,24 +388,24 @@
         {
           "id": "REL-PACKAGE-001",
           "status": "verified",
-          "use_cases": ["Download and install the v1.3.0 release"],
+          "use_cases": ["Download and install the v1.3.1 release"],
           "types": ["build", "package", "signature"],
           "role": "Mac operator",
-          "fixture": "v1.3.0 DMG and ZIP generated from the current working tree",
+          "fixture": "v1.3.1 DMG and ZIP generated from the current working tree",
           "steps": ["Build release app", "Mount DMG", "Extract ZIP", "Read bundle version", "Verify code signature", "Compare checksums"],
-          "expected": "Both archives contain a version 1.3.0 app that passes strict signature verification and matches published checksums.",
+          "expected": "Both archives contain a version 1.3.1 app that passes strict signature verification and matches published checksums.",
           "automated_status": "passed",
           "manual_status": "passed",
-          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.0 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.0.md.", "GitHub reports v1.3.0 as a public non-draft, non-prerelease release with three uploaded assets. All three were downloaded from unauthenticated public URLs; the downloaded DMG and ZIP passed the published SHA-256 checksums."]
+          "evidence": ["DMG mounted read-only and ZIP extracted successfully.", "Both embedded apps reported CFBundleShortVersionString 1.3.1 and passed codesign --verify --deep --strict.", "SHA-256 values are recorded in dist/SHA256SUMS.txt and docs/releases/v1.3.1.md.", "GitHub publication and public-download verification are pending."]
         }
       ],
       "tasks": [
         { "id": "TASK-RELEASE-README", "title": "Replace stale README claims and add all current screenshots", "status": "done" },
         { "id": "TASK-RELEASE-PACKAGE", "title": "Build and verify versioned DMG, ZIP and checksums", "status": "done" },
-        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "done" }
+        { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.1", "status": "doing" }
       ],
       "gaps": [
-        "Origin main reaches 95.61 percent line coverage at commit 49474cf9f307c36040c1fb24e4caca0aeffb767d, but these test and testability changes are not part of the published v1.3.0 tag or artifacts.",
+        "The v1.3.1 GitHub release and unauthenticated public downloads have not yet been created and revalidated.",
         "The release artifacts are ad-hoc signed and not Apple-notarized."
       ]
     }
