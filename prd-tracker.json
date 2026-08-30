@@ -4,15 +4,15 @@
   "project": "mac-tool-kit",
   "mode": "local-only",
   "source_of_truth": "repo-json",
-  "updated_at": "2026-08-30T12:22:00+08:00",
+  "updated_at": "2026-08-30T12:27:00+08:00",
   "acceptance_policy": {
     "verified_requires": ["automated tests passed", "manual acceptance passed", "source provenance is visible"],
     "numeric_claims": "Measured, provider-reported, derived, estimated, inferred, and unavailable values must never share the same unqualified label.",
     "repo_target": "Core logic coverage above 95 percent and zero linter warnings before a release claim."
   },
   "summary": {
-    "overall_status": "coverage-gate-passed-working-tree-unreleased",
-    "verdict": "working-tree-tests-verified-release-artifacts-unchanged",
+    "overall_status": "main-coverage-gate-passed-release-artifacts-unchanged",
+    "verdict": "origin-main-coverage-verified-v1.3.0-artifacts-unchanged",
     "prd_items": 5,
     "verified": 0,
     "partial": 5,
@@ -31,7 +31,7 @@
       "title": "Dashboard data truth audit",
       "status": "partial",
       "priority": "P0",
-      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. The current working tree now passes the repository coverage gate; destructive-action paths remain deliberately manual and the published v1.3.0 artifacts are unchanged.",
+      "summary": "Truth-safety fixes are implemented and all eight tabs were inspected in the installed app. History rendering is collapsed, indexed and batch-limited; the misleading RAM purge action is removed because macOS purge cannot clear inactive pages. Commit 49474cf9f307c36040c1fb24e4caca0aeffb767d is now on origin/main and passes the repository coverage gate; destructive-action paths remain deliberately manual and the published v1.3.0 artifacts are unchanged.",
       "source_refs": [
         "Sources/MacToolKitCore",
         "Sources/MacDashboardApp",
@@ -361,7 +361,7 @@
       "title": "MacDashboard v1.3.0 public release",
       "status": "partial",
       "priority": "P0",
-      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. The current uncommitted working tree passes the 95 percent coverage policy, but the already-published v1.3.0 tag and artifacts have not been rebuilt from these coverage changes.",
+      "summary": "GitHub Release v1.3.0 is public with the README, eight Retina screenshots, evidence-based release notes, versioned DMG, ZIP and checksums. Commit 49474cf9f307c36040c1fb24e4caca0aeffb767d on origin/main passes the 95 percent coverage policy, but the already-published v1.3.0 tag and artifacts have not been rebuilt from these coverage changes.",
       "source_refs": ["README.md", "docs/releases/v1.3.0.md", "VERSION", "scripts/build_app.sh", "scripts/package_dmg.sh", "assets/screenshots", "https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0"],
       "acceptance_criteria": [
         "README shows all eight current tabs with direct high-resolution PNG captures and factual feature descriptions.",
@@ -405,7 +405,7 @@
         { "id": "TASK-RELEASE-GITHUB", "title": "Commit, push, tag and publish GitHub Release v1.3.0", "status": "done" }
       ],
       "gaps": [
-        "The current working tree reaches 95.61 percent line coverage, but these test and testability changes are not part of the published v1.3.0 tag or artifacts.",
+        "Origin main reaches 95.61 percent line coverage at commit 49474cf9f307c36040c1fb24e4caca0aeffb767d, but these test and testability changes are not part of the published v1.3.0 tag or artifacts.",
         "The release artifacts are ad-hoc signed and not Apple-notarized."
       ]
     }

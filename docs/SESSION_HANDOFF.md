@@ -1,11 +1,11 @@
 # Session Handoff — MacDashboard coverage gate
 
-Updated: 2026-08-30 12:22 Asia/Taipei
+Updated: 2026-08-30 12:27 Asia/Taipei
 
 ## Current state
 
 - GitHub Release [`v1.3.0`](https://github.com/PeterTing/mac-tool-kit/releases/tag/v1.3.0) is public, non-draft and non-prerelease. Tag `v1.3.0` resolves to source commit `4778d2fe097fc5a1cc502a3476c303a9909ceef0`.
-- The current working tree has raised combined source line coverage from 71.04% to 95.61% with behavior-focused tests. These local changes are not yet committed, tagged, or rebuilt into the published v1.3.0 artifacts.
+- Commit `49474cf9f307c36040c1fb24e4caca0aeffb767d` is pushed to `origin/main` and raises combined source line coverage from 71.04% to 95.61% with behavior-focused tests. These changes are not tagged or rebuilt into the published v1.3.0 artifacts.
 - Coverage now exercises AI value models and pricing, provider parsers, summary/history/runtime/tree behavior, storage boundaries, live read-only metrics, hardware presentation, lag diagnosis, the fan socket protocol, and privileged-helper success/failure outcomes.
 - `FanHelperClient` and `PrivilegedHelperManager` gained internal dependency-injection seams so socket and administrator-script behavior can be tested without changing the public shared-client defaults or performing privileged writes.
 - The unreachable Lag severity branch was removed after tests covered every reachable score/cause combination; the user-visible severe verdict remains covered by combined critical signals.
@@ -48,7 +48,7 @@ Updated: 2026-08-30 12:22 Asia/Taipei
 
 ## Follow-up priorities
 
-1. Review and commit the current coverage/testability changes before cutting a future release; do not imply that v1.3.0 contains them.
+1. Include commit `49474cf9f307c36040c1fb24e4caca0aeffb767d` when cutting a future release; do not imply that v1.3.0 contains it.
 2. Add an automated screenshot/layout baseline for all eight tabs.
 3. If fully automated installation is required, sign with a Developer ID certificate and notarize the DMG/ZIP workflow.
 4. Keep destructive acceptance isolated: use a user-approved disposable cache fixture, never unrelated live data or Docker volumes.
@@ -56,7 +56,7 @@ Updated: 2026-08-30 12:22 Asia/Taipei
 ## Risks and deliberate gaps
 
 - Coverage is 95.61%; future source growth still needs accompanying tests so CI does not regress below 95%.
-- The coverage result applies to the current working tree, not the published v1.3.0 commit or downloadable artifacts.
+- The coverage result applies to pushed `origin/main` commit `49474cf9f307c36040c1fb24e4caca0aeffb767d`, not the published v1.3.0 commit or downloadable artifacts.
 - The app is ad-hoc signed and not Apple-notarized.
 - No real user-file deletion, unrelated process termination, Docker volume deletion, or manual fan write was executed for release evidence.
 - Automated pixel-diff regression is not configured; all eight final screenshots were manually inspected.
