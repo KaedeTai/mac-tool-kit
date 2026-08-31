@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
         let menu = NSMenu()
         let toggle = NSMenuItem(
-            title: "在 Dock 圖示顯示用量 (CPU / RAM / GPU)",
+            title: "在 Dock 圖示顯示用量 (CPU / RAM / GPU / 溫度)",
             action: #selector(toggleDockUsage),
             keyEquivalent: ""
         )

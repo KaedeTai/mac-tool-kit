@@ -1,8 +1,8 @@
 import AppKit
 
-/// Draws a live CPU / RAM / GPU meter into the Dock icon, in the spirit of
-/// Activity Monitor's "Show CPU Usage" Dock icon — but with all three bars
-/// visible at once.
+/// Draws a live CPU / RAM / GPU / temperature meter into the Dock icon, in the
+/// spirit of Activity Monitor's "Show CPU Usage" Dock icon — but with all four
+/// channels visible at once.
 @MainActor
 final class DockTileController {
 
@@ -32,22 +32,27 @@ final class DockTileController {
         setEnabled(!isEnabled)
     }
 
-    /// Feed fresh values in. Cheap: it only redraws when something moved
-    /// enough to be visible at Dock resolution.
+    /// Feed fresh utilization values in. Cheap: it only redraws when something
+    /// moved enough to be visible at Dock resolution.
     func update(cpu: Double, ram: Double, gpu: Double) {
         guard isEnabled else { return }
-        let changed = gaugeView.setValues(cpu: cpu, ram: ram, gpu: gpu)
-        if changed {
+        if gaugeView.setValues(cpu: cpu, ram: ram, gpu: gpu) {
+            NSApp.dockTile.display()
+        }
+    }
+
+    /// Temperature arrives from the thermal poller rather than the metrics
+    /// sampler, so it updates on its own cadence. `nil` means no component
+    /// reported a measurement, and the bar is drawn empty rather than as zero.
+    func updateTemperature(_ celsius: Double?) {
+        guard isEnabled else { return }
+        if gaugeView.setTemperature(celsius) {
             NSApp.dockTile.display()
         }
     }
 
     private func apply() {
-        if isEnabled {
-            NSApp.dockTile.contentView = gaugeView
-        } else {
-            NSApp.dockTile.contentView = nil
-        }
+        NSApp.dockTile.contentView = isEnabled ? gaugeView : nil
         NSApp.dockTile.display()
     }
 }
@@ -59,6 +64,16 @@ final class DockGaugeView: NSView {
     private var cpu: Double = 0
     private var ram: Double = 0
     private var gpu: Double = 0
+    private var temperature: Double? = nil
+
+    /// Dock bar scale for temperature. Below `min` a Mac is simply idle-cool
+    /// and below `max` it has not yet reached the throttling range, so this
+    /// window is where the useful resolution is.
+    private enum TemperatureScale {
+        static let min: Double = 30
+        static let max: Double = 100
+        static let hot: Double = 85
+    }
 
     private enum Palette {
         static let background = NSColor(srgbRed: 0.07, green: 0.08, blue: 0.10, alpha: 0.94)
@@ -68,14 +83,33 @@ final class DockGaugeView: NSView {
         static let cpu        = NSColor(srgbRed: 0.24, green: 0.66, blue: 1.00, alpha: 1.0)  // blue
         static let ram        = NSColor(srgbRed: 0.68, green: 0.40, blue: 0.98, alpha: 1.0)  // purple
         static let gpu        = NSColor(srgbRed: 1.00, green: 0.62, blue: 0.10, alpha: 1.0)  // amber
-        static let hot        = NSColor(srgbRed: 1.00, green: 0.27, blue: 0.30, alpha: 1.0)  // red >= 90%
+        static let temp       = NSColor(srgbRed: 0.16, green: 0.80, blue: 0.72, alpha: 1.0)  // teal
+        static let hot        = NSColor(srgbRed: 1.00, green: 0.27, blue: 0.30, alpha: 1.0)  // red
     }
 
     /// Returns true when the change is big enough to be worth a redraw.
     func setValues(cpu: Double, ram: Double, gpu: Double) -> Bool {
-        let c = cpu.clamped(), r = ram.clamped(), g = gpu.clamped()
+        let c = cpu.clampedPercentage(), r = ram.clampedPercentage(), g = gpu.clampedPercentage()
         let moved = abs(c - self.cpu) >= 0.5 || abs(r - self.ram) >= 0.5 || abs(g - self.gpu) >= 0.5
         self.cpu = c; self.ram = r; self.gpu = g
+        if moved { needsDisplay = true }
+        return moved
+    }
+
+    func setTemperature(_ celsius: Double?) -> Bool {
+        let sanitized: Double? = {
+            guard let celsius, celsius.isFinite, celsius > 0 else { return nil }
+            return celsius
+        }()
+
+        let moved: Bool
+        switch (temperature, sanitized) {
+        case (nil, nil): moved = false
+        case let (old?, new?): moved = abs(old - new) >= 0.5
+        default: moved = true
+        }
+
+        temperature = sanitized
         if moved { needsDisplay = true }
         return moved
     }
@@ -94,18 +128,31 @@ final class DockGaugeView: NSView {
         cardPath.lineWidth = s(1.5)
         cardPath.stroke()
 
-        let barWidth = s(20)
-        let gap = s(12)
-        let totalWidth = barWidth * 3 + gap * 2
+        let barWidth = s(18)
+        let gap = s(9)
+        let totalWidth = barWidth * 4 + gap * 3
         let startX = (bounds.width - totalWidth) / 2
         let barBottom = s(30)
         let barHeight = s(82)
 
-        let entries: [(value: Double, color: NSColor, label: String)] = [
-            (cpu, Palette.cpu, "C"),
-            (ram, Palette.ram, "R"),
-            (gpu, Palette.gpu, "G")
+        var entries: [(fraction: Double, color: NSColor, label: String)] = [
+            (cpu / 100, cpu >= 90 ? Palette.hot : Palette.cpu, "C"),
+            (ram / 100, ram >= 90 ? Palette.hot : Palette.ram, "R"),
+            (gpu / 100, gpu >= 90 ? Palette.hot : Palette.gpu, "G")
         ]
+
+        if let temperature {
+            let span = TemperatureScale.max - TemperatureScale.min
+            let fraction = (temperature - TemperatureScale.min) / span
+            entries.append((
+                min(1, max(0, fraction)),
+                temperature >= TemperatureScale.hot ? Palette.hot : Palette.temp,
+                "T"
+            ))
+        } else {
+            // No measured sensor: an empty track is honest, a zero bar is not.
+            entries.append((0, Palette.temp, "T"))
+        }
 
         for (index, entry) in entries.enumerated() {
             let x = startX + CGFloat(index) * (barWidth + gap)
@@ -116,25 +163,21 @@ final class DockGaugeView: NSView {
             Palette.track.setFill()
             trackPath.fill()
 
-            let fraction = CGFloat(entry.value / 100.0)
-            if fraction > 0.005 {
+            if entry.fraction > 0.005 {
                 NSGraphicsContext.saveGraphicsState()
                 trackPath.addClip()
 
-                let filledHeight = max(barWidth, barHeight * fraction)
+                let filledHeight = max(barWidth, barHeight * CGFloat(entry.fraction))
                 let fillRect = NSRect(x: x, y: barBottom, width: barWidth, height: filledHeight)
-                let top = entry.value >= 90 ? Palette.hot : entry.color
-                let bottom = top.blended(withFraction: 0.35, of: .black) ?? top
-                let gradient = NSGradient(starting: bottom, ending: top)
-                gradient?.draw(in: fillRect, angle: 90)
+                let bottom = entry.color.blended(withFraction: 0.35, of: .black) ?? entry.color
+                NSGradient(starting: bottom, ending: entry.color)?.draw(in: fillRect, angle: 90)
 
                 NSGraphicsContext.restoreGraphicsState()
             }
 
             // Channel letter beneath the bar
-            let font = NSFont.systemFont(ofSize: s(15), weight: .bold)
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: font,
+                .font: NSFont.systemFont(ofSize: s(14), weight: .bold),
                 .foregroundColor: Palette.label
             ]
             let text = entry.label as NSString
@@ -148,7 +191,7 @@ final class DockGaugeView: NSView {
 }
 
 private extension Double {
-    func clamped() -> Double {
+    func clampedPercentage() -> Double {
         if isNaN || isInfinite { return 0 }
         return Swift.min(100, Swift.max(0, self))
     }
