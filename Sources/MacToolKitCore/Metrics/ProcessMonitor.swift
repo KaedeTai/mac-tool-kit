@@ -97,7 +97,10 @@ public final class ProcessMonitor: @unchecked Sendable {
                 let res = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &taskInfo, taskInfoSize)
                 guard res == taskInfoSize else { continue }
 
-                let memBytes = taskInfo.pti_resident_size
+                // Activity Monitor's "Memory" column is phys_footprint, not RSS.
+                // On Apple Silicon, Metal/MLX buffers and compressed/swapped pages
+                // are excluded from RSS, so RSS can under-report by tens of GB.
+                let memBytes = Self.physicalFootprint(pid: pid) ?? taskInfo.pti_resident_size
                 let ramPct = totalPhysicalRAM > 0 ? (Double(memBytes) / Double(totalPhysicalRAM)) * 100.0 : 0.0
                 let threadCount = Int(taskInfo.pti_threadnum)
                 let totalCpuTicks = taskInfo.pti_total_user + taskInfo.pti_total_system
@@ -181,6 +184,18 @@ public final class ProcessMonitor: @unchecked Sendable {
             }
             return results
         }
+    }
+
+    /// Same value Activity Monitor shows in its "Memory" column (`ri_phys_footprint`).
+    static func physicalFootprint(pid: pid_t) -> UInt64? {
+        var usage = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &usage) { ptr in
+            ptr.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(pid, RUSAGE_INFO_V4, $0)
+            }
+        }
+        guard result == 0, usage.ri_phys_footprint > 0 else { return nil }
+        return usage.ri_phys_footprint
     }
 
     private func resolveMetadata(pid: pid_t, rawName: String, isGuiApp: Bool, bundleId: String?) -> ProcessMetadata {

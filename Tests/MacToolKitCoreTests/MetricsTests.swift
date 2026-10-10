@@ -41,6 +41,23 @@ final class MetricsTests: XCTestCase {
         XCTAssertLessThanOrEqual(snapshot.usedPercentage, 100.0)
     }
 
+    func testProcessMemoryUsesPhysicalFootprintLikeActivityMonitor() throws {
+        // Allocate and dirty 64 MB so footprint clearly includes it.
+        let size = 64 * 1024 * 1024
+        let buffer = UnsafeMutableRawPointer.allocate(byteCount: size, alignment: 16)
+        defer { buffer.deallocate() }
+        memset(buffer, 1, size)
+
+        let pid = getpid()
+        let footprint = try XCTUnwrap(ProcessMonitor.physicalFootprint(pid: pid))
+        XCTAssertGreaterThan(footprint, UInt64(size))
+
+        let sampled = try XCTUnwrap(ProcessMonitor().sampleProcesses().first { $0.pid == pid })
+        let relativeDiff = abs(Double(sampled.memoryBytes) - Double(footprint)) / Double(footprint)
+        XCTAssertLessThan(relativeDiff, 0.25)
+        XCTAssertNil(ProcessMonitor.physicalFootprint(pid: 2_000_000_000))
+    }
+
     func testProcessMonitorSampling() {
         let monitor = ProcessMonitor()
         let processes = monitor.sampleProcesses(limit: 20)
