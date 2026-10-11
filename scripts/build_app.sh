@@ -26,12 +26,14 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
-cp ".build/arm64-apple-macosx/release/MacDashboardApp" "$APP_BUNDLE/Contents/MacOS/MacDashboardApp" 2>/dev/null || \
-cp ".build/release/MacDashboardApp" "$APP_BUNDLE/Contents/MacOS/MacDashboardApp"
+# Ask SwiftPM where it actually wrote the products. Newer toolchains use
+# .build/out/Products/Release instead of .build/<triple>/release, and a
+# hard-coded path silently picks up a stale binary from an older build.
+BIN_PATH="$(swift build -c release --disable-sandbox --scratch-path .build --show-bin-path)"
+cp "$BIN_PATH/MacDashboardApp" "$APP_BUNDLE/Contents/MacOS/MacDashboardApp"
 
-# Copy MacDashboardFanHelper to Resources and MacOS
-cp ".build/arm64-apple-macosx/release/MacDashboardFanHelper" "$APP_BUNDLE/Contents/Resources/MacDashboardFanHelper" 2>/dev/null || \
-cp ".build/release/MacDashboardFanHelper" "$APP_BUNDLE/Contents/Resources/MacDashboardFanHelper" 2>/dev/null || true
+# Copy MacDashboardFanHelper to Resources
+cp "$BIN_PATH/MacDashboardFanHelper" "$APP_BUNDLE/Contents/Resources/MacDashboardFanHelper"
 
 # Copy AppIcon.icns if present
 if [ -f "$DIR/Resources/AppIcon.icns" ]; then

@@ -18,11 +18,10 @@ package: dmg
 test:
 	@mkdir -p .tmp .clang-cache .module-cache
 	TMPDIR=$$(pwd)/.tmp CLANG_MODULE_CACHE_PATH=$$(pwd)/.clang-cache SWIFT_MODULECACHE_OVERRIDE_DIRECTORY=$$(pwd)/.module-cache \
-	swift build --build-tests --disable-sandbox --scratch-path .build -Xswiftc -module-cache-path -Xswiftc $$(pwd)/.module-cache && \
-	xcrun xctest .build/arm64-apple-macosx/debug/mac-tool-kitPackageTests.xctest
+	swift test --disable-sandbox --scratch-path .build -Xswiftc -module-cache-path -Xswiftc $$(pwd)/.module-cache
 
 run: build
-	@.build/arm64-apple-macosx/debug/MacDashboardApp
+	@"$$(swift build --disable-sandbox --scratch-path .build --show-bin-path)/MacDashboardApp"
 
 app: release
 
